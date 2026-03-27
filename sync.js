@@ -41,6 +41,47 @@ async function saveDb(db) {
 }
 
 // ----------------------------------------------------
+// TEST PŘIPOJENÍ K POHODĚ
+// ----------------------------------------------------
+async function testPohodaConnection() {
+  const baseUrl = POHODA_MSERVER_URL.replace(/\/xml$/, "");
+  const url = `${baseUrl}/status?companyDetail`;
+  const auth = "Basic " + Buffer.from(`${POHODA_USER}:${POHODA_PASS}`).toString("base64");
+
+  console.log(`🔗 Testuji připojení k Pohoda mServeru na ${url}...`);
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: auth },
+    });
+
+    if (res.status === 200) {
+      const text = await res.text();
+      const parser = new xml2js.Parser();
+      const result = await parser.parseStringPromise(text);
+
+      console.log("✅ PŘIPOJENÍ ÚSPĚŠNÉ! Podrobnosti o firmě v Pohodě:");
+      if (result.mserver && result.mserver.companyDetail) {
+        const detail = result.mserver.companyDetail[0];
+        console.log(`   🏢 Firma: ${detail.company ? detail.company[0] : "Neznámá"}`);
+        console.log(`   📂 Databáze: ${detail.databaseName ? detail.databaseName[0] : "Neznámá"}`);
+        console.log(`   📅 Účetní rok: ${detail.year ? detail.year[0] : "Neznámý"}`);
+      }
+    } else if (res.status === 401) {
+      console.error("❌ CHYBA AUTENTIZACE (401): Jméno nebo heslo do Pohody (v .env) je špatně.");
+    } else if (res.status === 403) {
+      console.error("❌ CHYBA (403): Uživatel nemá práva k této účetní jednotce nebo funkci mServeru.");
+    } else {
+      console.error(`❌ CHYBA: mServer odpověděl kódem ${res.status}.`);
+    }
+  } catch (err) {
+    console.error("❌ CHYBA PŘIPOJENÍ: Nepodařilo se spojit s mServerem. Je spuštěný a port v .env správný?");
+    console.log(`(Detail: ${err.message})`);
+  }
+}
+
+// ----------------------------------------------------
 // KROK 1: ZÍSKÁNÍ FAKTUR Z POHODY
 // ----------------------------------------------------
 async function fetchInvoicesFromPohoda() {
@@ -260,9 +301,12 @@ async function runSync(testOrderId = null) {
 // Spuštění pokud je voláno napřímo (např. v Plánovači úloh / cron)
 if (require.main === module) {
   const args = process.argv.slice(2);
-  const testFlagIndex = args.indexOf('--test');
-  
-  if (testFlagIndex !== -1 && args[testFlagIndex + 1]) {
+  const testFlagIndex = args.indexOf("--test");
+  const testPohodaIndex = args.indexOf("--test-pohoda");
+
+  if (testPohodaIndex !== -1) {
+    testPohodaConnection();
+  } else if (testFlagIndex !== -1 && args[testFlagIndex + 1]) {
     runSync(args[testFlagIndex + 1]);
   } else {
     runSync();

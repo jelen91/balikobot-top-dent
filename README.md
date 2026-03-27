@@ -38,6 +38,15 @@ npm install
 ---
 
 ## 🛠 Příklad: Testovací režim (bezpečný test)
+
+### 1. Test spojení s Pohodou
+Předtím, než začnete testovat konkrétní objednávky, ověřte si, že se skript vůbec do Pohody přihlásí:
+```bash
+node sync.js --test-pohoda
+```
+Pokud je vše v pořádku, skript vypíše název firmy a účetní rok, ke kterému je mServer připojen. Pokud ne, uvidíte přesnou chybu (špatné heslo, chybějící práva atd.).
+
+### 2. Test konkrétní objednávky
 Pro bezpečné vyzkoušení funkce skriptu (end-to-end průchod jedné objednávky bez rizika dvojitého zpracování nebo poškození databáze) slouží testovací režim. Skript stiskne do Pohody reálný dotaz, vyfiltruje pouze žádaný nákup, spáruje jej s Balíkobotem a nahraje přímo do Upgates.
 
 **Jaké číslo tam zadat?**
