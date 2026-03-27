@@ -48,17 +48,17 @@ async function testPohodaConnection() {
   const url = `${baseUrl}/status?companyDetail`;
   const auth = "Basic " + Buffer.from(`${POHODA_USER}:${POHODA_PASS}`).toString("base64");
 
-  const maskedPass = POHODA_PASS.length > 2 
-    ? POHODA_PASS[0] + "*".repeat(POHODA_PASS.length - 2) + POHODA_PASS[POHODA_PASS.length - 1] 
+  const maskedPass = POHODA_PASS.length > 2
+    ? POHODA_PASS[0] + "*".repeat(POHODA_PASS.length - 2) + POHODA_PASS[POHODA_PASS.length - 1]
     : POHODA_PASS;
-  
+
   console.log(`🔗 Testuji připojení k Pohoda mServeru na ${url}...`);
   console.log(`👤 Použité údaje: ${POHODA_USER} : ${maskedPass}`);
 
   try {
     const res = await fetch(url, {
       method: "GET",
-      headers: { Authorization: auth },
+      headers: { "STW-Authorization": auth },
     });
 
     if (res.status === 200) {
@@ -121,7 +121,7 @@ async function fetchInvoicesFromPohoda() {
   const parser = new xml2js.Parser();
   const result = await parser.parseStringPromise(xmlData);
   */
-  
+
   // Pro demonstraci vrátíme statické pole:
   return [
     {
@@ -138,7 +138,7 @@ async function fetchInvoicesFromPohoda() {
 async function fetchAllRecentPackages() {
   console.log('📥 Stahuji aktuální balíky (neuzavřené i poslední svozy) z Balíkobotu...');
   const packageMap = new Map();
-  
+
   try {
     // 1. Získání aktivních dopravců
     const resInfo = await fetch(`${BALIKOBOT_BASE_URL}/info/carriers`, {
@@ -150,7 +150,7 @@ async function fetchAllRecentPackages() {
     // 2. Projít každého dopravce a stáhnout aktivní balíky
     for (const carrier of carriers) {
       const endpoints = [`/${carrier.slug}/overview`, `/${carrier.slug}/orderview`];
-      
+
       for (const endp of endpoints) {
         try {
           const res = await fetch(`${BALIKOBOT_BASE_URL}${endp}`, {
@@ -187,7 +187,7 @@ async function fetchAllRecentPackages() {
   } catch (err) {
     console.error('❌ Chyba při stahování dopravců:', err.message);
   }
-  
+
   console.log(`✅ Staženo ${packageMap.size} balíků připravených ke spárování ze současných svozů.`);
   return packageMap;
 }
@@ -245,13 +245,13 @@ async function runSync(testOrderId = null) {
   } else {
     console.log('🚀 Spouštím standardní synchronizační cyklus...');
   }
-  
+
   const db = await loadDb();
 
   try {
     // Vždy načítáme faktury z Pohody (i v test režimu, abychom otestovali spojení)
     let invoices = await fetchInvoicesFromPohoda();
-    
+
     // Pokud je testovací režim, vyfiltrujeme pouze tu jednu fakturu/objednávku
     if (testOrderId) {
       invoices = invoices.filter(inv => String(inv.invoiceNumber) === String(testOrderId));
@@ -262,7 +262,7 @@ async function runSync(testOrderId = null) {
       }
       console.log(`✅ Doklad ${testOrderId} úspěšně stažen z Pohody (včetně PDF PDF/A).`);
     }
-    
+
     // Stáhneme vše, co Balíkobot momentálně "vydá" (z posledních a aktivních svozů)
     const recentPackages = await fetchAllRecentPackages();
 
@@ -271,7 +271,7 @@ async function runSync(testOrderId = null) {
       if (!testOrderId && db.processed.includes(inv.invoiceNumber)) {
         continue;
       }
-      
+
       console.log(`Zpracovávám doklad: ${inv.invoiceNumber}`);
 
       // 2. Najdeme balík v naší mapě stažených z Balíkobotu
@@ -280,7 +280,7 @@ async function runSync(testOrderId = null) {
       if (pkg && pkg.found) {
         // 3. Pošleme přes API do Upgates (Tracking + Faktura PDF)
         console.log(`📦 Nalezen balík pro ${inv.invoiceNumber}! Tracking kód: ${pkg.trackingCode}`);
-        
+
         console.log(`📤 Odesílám data (Tracking kód + Fakura PDF) do Upgates...`);
         // Odesílá se REÁLNĚ i v testu na přání uživatele
         await updateUpgatesOrder(inv.upgatesOrderId, pkg.trackingCode, inv.pdfBase64);
