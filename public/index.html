@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="cs">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Top-Dent · Balíkobot Objednávky</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg-primary: #0f1117;
+      --bg-secondary: #1a1d27;
+      --bg-card: #21242f;
+      --bg-card-hover: #282c3a;
+      --bg-row: #181b24;
+      --border: #2d3141;
+      --text-primary: #e8eaf0;
+      --text-secondary: #9197a8;
+      --text-muted: #6b7185;
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.25);
+      --accent-light: #818cf8;
+      --green: #34d399;
+      --green-dim: rgba(52, 211, 153, 0.15);
+      --orange: #fb923c;
+      --orange-dim: rgba(251, 146, 60, 0.15);
+      --red: #f87171;
+      --red-dim: rgba(248, 113, 113, 0.15);
+      --blue: #60a5fa;
+      --blue-dim: rgba(96, 165, 250, 0.15);
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(12px);
+    }
+
+    .header-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-icon {
+      width: 42px;
+      height: 42px;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+
+    .logo-text h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .logo-text span {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 400;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+        box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.5);
+      }
+
+      50% {
+        opacity: 0.8;
+        box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+      }
+    }
+
+    .btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 8px 18px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      font-weight: 500;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+      border-color: var(--accent);
+    }
+
+    .btn.loading .spin {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ── Main ── */
+    .main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 28px 32px;
+    }
+
+    /* ── Stats ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+
+    .stat {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      transition: all 0.25s;
+    }
+
+    .stat:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--text-primary), var(--accent-light));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      background: var(--bg-card);
+      border-radius: var(--radius);
+      padding: 4px;
+      border: 1px solid var(--border);
+      width: fit-content;
+    }
+
+    .tab {
+      padding: 8px 20px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      color: var(--text-muted);
+      border: none;
+      background: transparent;
+      font-family: inherit;
+    }
+
+    .tab:hover {
+      color: var(--text-secondary);
+    }
+
+    .tab.active {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 2px 8px var(--accent-glow);
+    }
+
+    /* ── Order Cards ── */
+    .orders-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .order-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+
+    .order-card:hover {
+      border-color: rgba(99, 102, 241, 0.4);
+    }
+
+    .order-header {
+      padding: 18px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+
+    .order-header:hover {
+      background: var(--bg-card-hover);
+    }
+
+    .order-header-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .carrier-badge {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      background: var(--accent-glow);
+      color: var(--accent-light);
+      border-radius: 8px;
+      white-space: nowrap;
+    }
+
+    .order-id {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .order-meta {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      font-size: 13px;
+    }
+
+    .order-date {
+      color: var(--text-muted);
+    }
+
+    .pkg-count {
+      background: var(--green-dim);
+      color: var(--green);
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 12px;
+    }
+
+    .doc-links {
+      display: flex;
+      gap: 8px;
+    }
+
+    .doc-link {
+      font-size: 12px;
+      padding: 5px 12px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--accent-light);
+      text-decoration: none;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .doc-link:hover {
+      background: var(--accent-glow);
+      border-color: var(--accent);
+    }
+
+    .expand-arrow {
+      transition: transform 0.3s;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: 8px;
+    }
+
+    .order-card.expanded .expand-arrow {
+      transform: rotate(180deg);
+    }
+
+    /* ── Packages Table ── */
+    .packages-container {
+      display: none;
+    }
+
+    .order-card.expanded .packages-container {
+      display: block;
+    }
+
+    .packages-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .packages-table thead {
+      background: var(--bg-row);
+    }
+
+    .packages-table th {
+      text-align: left;
+      padding: 10px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .packages-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-secondary);
+      vertical-align: top;
+    }
+
+    .packages-table tr:hover td {
+      background: rgba(99, 102, 241, 0.04);
+    }
+
+    .packages-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .pkg-name {
+      color: var(--text-primary);
+      font-weight: 500;
+    }
+
+    .pkg-address {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .pkg-id {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      color: var(--accent-light);
+    }
+
+    .pkg-carrier-id {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .pkg-price {
+      font-weight: 600;
+      color: var(--green);
+    }
+
+    .pkg-cod {
+      color: var(--orange);
+      font-weight: 500;
+    }
+
+    .label-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      padding: 4px 10px;
+      background: var(--blue-dim);
+      color: var(--blue);
+      text-decoration: none;
+      border-radius: 5px;
+      transition: all 0.2s;
+    }
+
+    .label-link:hover {
+      background: rgba(96, 165, 250, 0.25);
+    }
+
+    .settled-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-weight: 600;
+    }
+
+    .settled-yes {
+      background: var(--green-dim);
+      color: var(--green);
+    }
+
+    .settled-no {
+      background: var(--orange-dim);
+      color: var(--orange);
+    }
+
+    /* ── Carrier Grid (tab 2) ── */
+    .carrier-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 14px;
+    }
+
+    .carrier-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      transition: all 0.25s;
+      cursor: pointer;
+    }
+
+    .carrier-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .carrier-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .carrier-card-name {
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .carrier-card-slug {
+      font-size: 11px;
+      padding: 3px 10px;
+      background: var(--accent-glow);
+      color: var(--accent-light);
+      border-radius: 20px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-weight: 500;
+    }
+
+    .service-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s;
+    }
+
+    .carrier-card.expanded .service-tags {
+      max-height: 500px;
+    }
+
+    .service-tag {
+      font-size: 11px;
+      padding: 3px 8px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text-secondary);
+    }
+
+    .carrier-svc-count {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    /* ── Empty / Loading / Error ── */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 20px;
+      gap: 20px;
+    }
+
+    .loader {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    .loading-text {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .loading-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      opacity: 0.6;
+      margin-top: -10px;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+      max-width: 360px;
+      margin: 0 auto;
+    }
+
+    .error-banner {
+      background: var(--red-dim);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      color: var(--red);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .header-inner {
+        padding: 0 16px;
+      }
+
+      .main {
+        padding: 16px;
+      }
+
+      .order-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .order-meta {
+        flex-wrap: wrap;
+      }
+
+      .doc-links {
+        flex-wrap: wrap;
+      }
+
+      .packages-table {
+        font-size: 12px;
+      }
+
+      .packages-table th,
+      .packages-table td {
+        padding: 8px 10px;
+      }
+
+      .stats {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    @media (max-width: 600px) {
+      .carrier-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">B</div>
+        <div class="logo-text">
+          <h1>Balíkobot Viewer</h1>
+          <span>Top-Dent · API v2</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-indicator">
+          <div class="status-dot"></div>
+          <span>Connected</span>
+        </div>
+        <button class="btn" id="refreshBtn" onclick="loadAllData()">
+          <span class="spin">↻</span> Refresh
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main" id="mainContent">
+    <div class="loading-container">
+      <div class="loader"></div>
+      <div class="loading-text">Načítám data z Balíkobot API…</div>
+      <div class="loading-sub">Stahování objednávek a detailů zásilek</div>
+    </div>
+  </main>
+
+  <script>
+    let allData = null;
+    let activeTab = 'orders';
+
+    async function loadAllData() {
+      const main = document.getElementById('mainContent');
+      const refreshBtn = document.getElementById('refreshBtn');
+      refreshBtn.classList.add('loading');
+
+      main.innerHTML = `
+        <div class="loading-container">
+          <div class="loader"></div>
+          <div class="loading-text">Načítám data z Balíkobot API…</div>
+          <div class="loading-sub">Stahování objednávek a detailů zásilek (může trvat ~30s)</div>
+        </div>
+      `;
+
+      try {
+        const res = await fetch('/api/all-data');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        allData = await res.json();
+        console.log(allData)
+        renderDashboard(allData);
+      } catch (err) {
+        main.innerHTML = `
+          <div class="error-banner">⚠️ <span>Chyba: ${err.message}</span></div>
+          <div class="empty-state">
+            <div class="icon">📦</div>
+            <p>Nepodařilo se načíst data. Zkontrolujte připojení k API.</p>
+          </div>
+        `;
+      } finally {
+        refreshBtn.classList.remove('loading');
+      }
+    }
+
+    function renderDashboard(data) {
+      const carriers = data.carriers || [];
+
+      // Calculate stats
+      const carriersWithOrders = carriers.filter(c => c.order);
+      const totalPackages = carriersWithOrders.reduce((sum, c) => sum + (c.packages?.length || 0), 0);
+      const totalServices = carriers.reduce((sum, c) => {
+        const svc = c.services?.service_types || c.services?.services;
+        if (Array.isArray(svc)) return sum + svc.length;
+        if (svc && typeof svc === 'object') return sum + Object.keys(svc).length;
+        return sum;
+      }, 0);
+      const totalPrice = carriersWithOrders.reduce((sum, c) =>
+        sum + (c.packages || []).reduce((s, p) => s + parseFloat(p.price || 0), 0), 0
+      );
+
+      const main = document.getElementById('mainContent');
+      main.innerHTML = `
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Dopravci s objednávkami</div>
+            <div class="stat-value">${carriersWithOrders.length}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Celkem zásilek</div>
+            <div class="stat-value">${totalPackages}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Celková hodnota</div>
+            <div class="stat-value">${totalPrice.toLocaleString('cs-CZ')} Kč</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Aktivní dopravci</div>
+            <div class="stat-value">${carriers.length}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Služby celkem</div>
+            <div class="stat-value">${totalServices}</div>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <button class="tab ${activeTab === 'orders' ? 'active' : ''}" onclick="switchTab('orders')">📦 Objednávky</button>
+          <button class="tab ${activeTab === 'carriers' ? 'active' : ''}" onclick="switchTab('carriers')">🚚 Dopravci</button>
+        </div>
+
+        <div class="tab-content ${activeTab === 'orders' ? 'active' : ''}" id="tab-orders">
+          <div class="orders-list" id="ordersList"></div>
+        </div>
+
+        <div class="tab-content ${activeTab === 'carriers' ? 'active' : ''}" id="tab-carriers">
+          <div class="carrier-grid" id="carrierGrid"></div>
+        </div>
+      `;
+
+      // Render orders
+      const ordersList = document.getElementById('ordersList');
+      if (carriersWithOrders.length === 0) {
+        ordersList.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">📭</div>
+            <p>Žádné objednávky nebyly nalezeny.</p>
+          </div>
+        `;
+      } else {
+        carriersWithOrders
+          .sort((a, b) => (b.packages?.length || 0) - (a.packages?.length || 0))
+          .forEach(carrier => renderOrderCard(ordersList, carrier));
+      }
+
+      // Render carriers
+      const carrierGrid = document.getElementById('carrierGrid');
+      carriers.forEach(c => renderCarrierCard(carrierGrid, c));
+    }
+
+    function renderOrderCard(container, carrier) {
+      const order = carrier.order;
+      const pkgs = carrier.packages || [];
+      const card = document.createElement('div');
+      card.className = 'order-card';
+
+      const pkgRows = pkgs.map(pkg => `
+        <tr>
+          <td>
+            <div class="pkg-name">${esc(pkg.rec_name || '—')}</div>
+            <div class="pkg-address">${esc(pkg.rec_street || '')}${pkg.rec_city ? ', ' + esc(pkg.rec_city) : ''} ${esc(pkg.rec_zip || '')}</div>
+          </td>
+          <td><span class="pkg-id">${esc(pkg.eshop_id || pkg.package_id || '—')}</span></td>
+          <td><span class="pkg-carrier-id">${esc(pkg.carrier_id || '—')}</span></td>
+          <td>${esc(pkg.rec_email || '—')}</td>
+          <td>${esc(pkg.rec_phone || '—')}</td>
+          <td><span class="pkg-price">${pkg.price ? parseFloat(pkg.price).toLocaleString('cs-CZ') + ' Kč' : '—'}</span></td>
+          <td>${pkg.cod_price && parseFloat(pkg.cod_price) > 0 ? `<span class="pkg-cod">${parseFloat(pkg.cod_price).toLocaleString('cs-CZ')} Kč</span>` : '—'}</td>
+          <td>${pkg.weight ? pkg.weight + ' kg' : '—'}</td>
+          <td><span class="settled-badge ${pkg.settled === '1' ? 'settled-yes' : 'settled-no'}">${pkg.settled === '1' ? 'Ano' : 'Ne'}</span></td>
+          <td>${pkg.label_url ? `<a href="${pkg.label_url}" target="_blank" class="label-link">📄 Štítek</a>` : '—'}</td>
+        </tr>
+      `).join('');
+
+      card.innerHTML = `
+        <div class="order-header" onclick="this.parentElement.classList.toggle('expanded')">
+          <div class="order-header-left">
+            <span class="carrier-badge">${esc(carrier.name)}</span>
+            <span class="order-id">${esc(order.order_id)}</span>
+            <span class="pkg-count">${pkgs.length} zásilek</span>
+          </div>
+          <div class="order-meta">
+            <span class="order-date">🕐 ${esc(order.created || '')}</span>
+            <div class="doc-links">
+              ${order.labels_url ? `<a href="${order.labels_url}" target="_blank" class="doc-link">📄 Štítky</a>` : ''}
+              ${order.handover_url ? `<a href="${order.handover_url}" target="_blank" class="doc-link">📋 Předávací</a>` : ''}
+              ${order.file_url ? `<a href="${order.file_url}" target="_blank" class="doc-link">📁 CSV</a>` : ''}
+            </div>
+            <span class="expand-arrow">▼</span>
+          </div>
+        </div>
+        <div class="packages-container">
+          <table class="packages-table">
+            <thead>
+              <tr>
+                <th>Příjemce</th>
+                <th>Eshop ID</th>
+                <th>Carrier ID</th>
+                <th>Email</th>
+                <th>Telefon</th>
+                <th>Cena</th>
+                <th>Dobírka</th>
+                <th>Hmotnost</th>
+                <th>Vyříz.</th>
+                <th>Štítek</th>
+              </tr>
+            </thead>
+            <tbody>${pkgRows}</tbody>
+          </table>
+        </div>
+      `;
+
+      container.appendChild(card);
+    }
+
+    function renderCarrierCard(container, carrier) {
+      const svcRaw = carrier.services?.service_types || carrier.services?.services;
+      let serviceCount = 0;
+      let tagsHtml = '';
+
+      if (svcRaw && typeof svcRaw === 'object' && !Array.isArray(svcRaw)) {
+        const entries = Object.entries(svcRaw);
+        serviceCount = entries.length;
+        tagsHtml = entries.map(([code, name]) =>
+          `<span class="service-tag" title="${code}">${name}</span>`
+        ).join('');
+      } else if (Array.isArray(svcRaw)) {
+        serviceCount = svcRaw.length;
+        tagsHtml = svcRaw.map(s => `<span class="service-tag">${s.name || s}</span>`).join('');
+      }
+
+      const card = document.createElement('div');
+      card.className = 'carrier-card';
+      card.onclick = () => card.classList.toggle('expanded');
+      card.innerHTML = `
+        <div class="carrier-card-top">
+          <span class="carrier-card-name">${esc(carrier.name)}</span>
+          <span class="carrier-card-slug">${carrier.slug}</span>
+        </div>
+        <div class="carrier-svc-count">${serviceCount} služeb · ${carrier.order ? '✅ Má objednávky' : '—'}</div>
+        <div class="service-tags" style="margin-top:8px;">${tagsHtml}</div>
+      `;
+      container.appendChild(card);
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+      document.querySelector(`.tab:nth-child(${tab === 'orders' ? 1 : 2})`).classList.add('active');
+      document.getElementById(`tab-${tab}`).classList.add('active');
+    }
+
+    function esc(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
+
+    loadAllData();
+  </script>
+</body>
+
+</html>
