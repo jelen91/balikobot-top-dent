@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="cs">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Top-Dent · Sync Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary: #0a0b10;
+      --bg-secondary: #12141d;
+      --bg-card: #1a1d28;
+      --bg-card-hover: #22253a;
+      --bg-row: #151821;
+      --border: #2a2e42;
+      --text-primary: #e8eaf0;
+      --text-secondary: #9197a8;
+      --text-muted: #5e6478;
+      --accent: #6366f1;
+      --accent-glow: rgba(99, 102, 241, 0.2);
+      --accent-light: #818cf8;
+      --green: #34d399;
+      --green-dim: rgba(52, 211, 153, 0.12);
+      --orange: #fb923c;
+      --orange-dim: rgba(251, 146, 60, 0.12);
+      --red: #f87171;
+      --red-dim: rgba(248, 113, 113, 0.12);
+      --blue: #60a5fa;
+      --blue-dim: rgba(96, 165, 250, 0.12);
+      --yellow: #fbbf24;
+      --yellow-dim: rgba(251, 191, 36, 0.12);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 18px 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(20px);
+    }
+
+    .header-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .logo-icon {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent), #a78bfa);
+      border-radius: 11px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700; color: #fff;
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    .logo-text h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+    .logo-text span { font-size: 12px; color: var(--text-muted); font-weight: 400; }
+
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+
+    .nav-link {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-decoration: none;
+      padding: 7px 14px;
+      border-radius: var(--radius-sm);
+      transition: all 0.2s;
+    }
+    .nav-link:hover { color: var(--text-primary); background: var(--bg-card); }
+
+    .btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 8px 18px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      font-weight: 500;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+      border-color: var(--accent);
+    }
+
+    .btn-accent {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .btn-accent:hover {
+      background: #5457e5;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+
+    /* ── Main ── */
+    .main {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 28px 32px;
+    }
+
+    /* ── Connection Status ── */
+    .connection-bar {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .conn-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 22px;
+      flex: 1;
+      min-width: 200px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      transition: all 0.25s;
+    }
+
+    .conn-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      flex-shrink: 0;
+      transition: all 0.3s;
+    }
+
+    .conn-dot.ok { background: var(--green); box-shadow: 0 0 12px rgba(52, 211, 153, 0.5); }
+    .conn-dot.error, .conn-dot.auth_error { background: var(--red); box-shadow: 0 0 12px rgba(248, 113, 113, 0.4); }
+    .conn-dot.unreachable { background: var(--orange); box-shadow: 0 0 12px rgba(251, 146, 60, 0.4); }
+    .conn-dot.loading { background: var(--yellow); animation: blink 1s infinite; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .conn-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .conn-value { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+
+    /* ── Stats Grid ── */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+
+    .stat {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px 22px;
+      transition: all 0.25s;
+    }
+
+    .stat:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .stat-value {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .stat-value.green { color: var(--green); }
+    .stat-value.orange { color: var(--orange); }
+    .stat-value.red { color: var(--red); }
+    .stat-value.blue { color: var(--blue); }
+
+    /* ── Quick Actions ── */
+    .actions-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .actions-row input {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+      width: 220px;
+    }
+
+    .actions-row input:focus {
+      border-color: var(--accent);
+    }
+
+    .actions-row input::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* ── Section title ── */
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title .count {
+      font-size: 12px;
+      background: var(--accent-glow);
+      color: var(--accent-light);
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    /* ── Log Table ── */
+    .log-table-wrap {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .log-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .log-table thead { background: var(--bg-row); }
+
+    .log-table th {
+      text-align: left;
+      padding: 12px 18px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .log-table td {
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(42, 46, 66, 0.5);
+      color: var(--text-secondary);
+      vertical-align: middle;
+    }
+
+    .log-table tr:last-child td { border-bottom: none; }
+
+    .log-table tr:hover td { background: rgba(99, 102, 241, 0.03); }
+
+    /* ── Status Badges ── */
+    .badge {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .badge-success { background: var(--green-dim); color: var(--green); }
+    .badge-skipped { background: var(--yellow-dim); color: var(--yellow); }
+    .badge-error { background: var(--red-dim); color: var(--red); }
+    .badge-test { background: var(--blue-dim); color: var(--blue); }
+
+    .mono {
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+    }
+
+    .time-ago {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-state .icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+      opacity: 0.4;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--bg-card);
+      border: 1px solid var(--accent);
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      font-size: 13px;
+      color: var(--text-primary);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s;
+      z-index: 200;
+    }
+
+    .toast.visible {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* ── Loader ── */
+    .loading-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 20px;
+      gap: 20px;
+    }
+
+    .loader {
+      width: 48px; height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-text { font-size: 14px; color: var(--text-muted); }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .main { padding: 16px; }
+      .header-inner { padding: 0 16px; }
+      .connection-bar { flex-direction: column; }
+      .stats { grid-template-columns: repeat(2, 1fr); }
+      .log-table th, .log-table td { padding: 10px 12px; }
+      .actions-row { flex-direction: column; align-items: stretch; }
+      .actions-row input { width: 100%; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">⚡</div>
+        <div class="logo-text">
+          <h1>Sync Dashboard</h1>
+          <span>Top-Dent · Pohoda ↔ Balíkobot ↔ Upgates</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="/" class="nav-link">📦 Balíkobot Viewer</a>
+        <button class="btn" onclick="refreshAll()">
+          <span class="spin-icon">↻</span> Obnovit
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main" id="mainContent">
+    <div class="loading-container">
+      <div class="loader"></div>
+      <div class="loading-text">Načítám data…</div>
+    </div>
+  </main>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    let syncLog = null;
+    let processedDb = null;
+    let connStatus = null;
+
+    async function refreshAll() {
+      const main = document.getElementById('mainContent');
+      main.innerHTML = `<div class="loading-container"><div class="loader"></div><div class="loading-text">Načítám data…</div></div>`;
+
+      try {
+        const [logRes, processedRes, statusRes] = await Promise.allSettled([
+          fetch('/api/sync/log').then(r => r.json()),
+          fetch('/api/sync/processed').then(r => r.json()),
+          fetch('/api/sync/status').then(r => r.json()),
+        ]);
+
+        syncLog = logRes.status === 'fulfilled' ? logRes.value : { entries: [], stats: { total: 0, success: 0, skipped: 0, error: 0 }, lastRun: null };
+        processedDb = processedRes.status === 'fulfilled' ? processedRes.value : { processed: [] };
+        connStatus = statusRes.status === 'fulfilled' ? statusRes.value : { pohoda: 'unknown', balikobot: 'unknown', upgates: 'unknown' };
+
+        renderDashboard();
+      } catch (err) {
+        main.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p>Chyba: ${err.message}</p></div>`;
+      }
+    }
+
+    function renderDashboard() {
+      const stats = syncLog.stats || { total: 0, success: 0, skipped: 0, error: 0 };
+      const entries = (syncLog.entries || []).slice().reverse(); // newest first
+      const processed = processedDb?.processed || [];
+
+      const main = document.getElementById('mainContent');
+      main.innerHTML = `
+        <!-- Connection Status -->
+        <div class="connection-bar" id="connBar">
+          ${renderConnItem('Pohoda mServer', connStatus.pohoda)}
+          ${renderConnItem('Balíkobot API', connStatus.balikobot)}
+          ${renderConnItem('Upgates API', connStatus.upgates)}
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Celkem akcí</div>
+            <div class="stat-value blue">${stats.total}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Úspěšně odesláno</div>
+            <div class="stat-value green">${stats.success}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Přeskočeno</div>
+            <div class="stat-value orange">${stats.skipped}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Chyby</div>
+            <div class="stat-value red">${stats.error}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Zpracované faktury</div>
+            <div class="stat-value blue">${processed.length}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Poslední běh</div>
+            <div class="stat-value" style="font-size:16px;">${syncLog.lastRun ? formatTime(syncLog.lastRun) : '—'}</div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="actions-row">
+          <button class="btn btn-accent" onclick="runFullSync()">🚀 Spustit synchronizaci</button>
+          <input type="text" id="testInvoice" placeholder="Číslo faktury pro test…" />
+          <button class="btn" onclick="runTestSync()">🧪 Testovat fakturu</button>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="section-title">
+          📋 Historie synchronizace
+          <span class="count">${entries.length} záznamů</span>
+        </div>
+
+        ${entries.length === 0 ? `
+          <div class="empty-state">
+            <div class="icon">📭</div>
+            <p>Zatím nebyla provedena žádná synchronizace. Spusťte ji tlačítkem výše.</p>
+          </div>
+        ` : `
+          <div class="log-table-wrap">
+            <table class="log-table">
+              <thead>
+                <tr>
+                  <th>Čas</th>
+                  <th>Typ</th>
+                  <th>Stav</th>
+                  <th>Faktura</th>
+                  <th>Tracking</th>
+                  <th>Zpráva</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${entries.slice(0, 100).map(e => `
+                  <tr>
+                    <td>
+                      <div class="mono">${formatTime(e.timestamp)}</div>
+                      <div class="time-ago">${timeAgo(e.timestamp)}</div>
+                    </td>
+                    <td><span class="badge ${e.type === 'test' ? 'badge-test' : 'badge-success'}">${e.type === 'test' ? '🧪 Test' : '⚡ Sync'}</span></td>
+                    <td><span class="badge badge-${e.status}">${statusIcon(e.status)} ${statusLabel(e.status)}</span></td>
+                    <td class="mono">${e.invoiceNumber || '—'}</td>
+                    <td class="mono">${e.trackingCode || '—'}</td>
+                    <td style="max-width:300px;">${e.message || ''}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `}
+      `;
+    }
+
+    function renderConnItem(label, status) {
+      const statusLabels = {
+        ok: 'Připojeno',
+        error: 'Chyba',
+        auth_error: 'Špatné heslo',
+        unreachable: 'Nedostupné',
+        unknown: 'Neznámý',
+      };
+      return `
+        <div class="conn-item">
+          <div class="conn-dot ${status}"></div>
+          <div>
+            <div class="conn-label">${label}</div>
+            <div class="conn-value">${statusLabels[status] || status}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function statusIcon(s) {
+      if (s === 'success') return '✅';
+      if (s === 'skipped') return '⏭️';
+      if (s === 'error') return '❌';
+      return '❓';
+    }
+
+    function statusLabel(s) {
+      if (s === 'success') return 'Úspěch';
+      if (s === 'skipped') return 'Přeskočeno';
+      if (s === 'error') return 'Chyba';
+      return s;
+    }
+
+    function formatTime(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso);
+      return d.toLocaleString('cs-CZ', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+
+    function timeAgo(iso) {
+      if (!iso) return '';
+      const diff = Date.now() - new Date(iso).getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'právě teď';
+      if (mins < 60) return `před ${mins} min`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `před ${hours} hod`;
+      const days = Math.floor(hours / 24);
+      return `před ${days} dny`;
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('visible');
+      setTimeout(() => toast.classList.remove('visible'), 3000);
+    }
+
+    async function runFullSync() {
+      showToast('🚀 Synchronizace spuštěna…');
+      try {
+        await fetch('/api/sync/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        // Wait a moment then refresh
+        setTimeout(refreshAll, 5000);
+      } catch (err) {
+        showToast('❌ Chyba: ' + err.message);
+      }
+    }
+
+    async function runTestSync() {
+      const id = document.getElementById('testInvoice')?.value?.trim();
+      if (!id) {
+        showToast('⚠️ Zadejte číslo faktury');
+        return;
+      }
+      showToast(`🧪 Testuji fakturu ${id}…`);
+      try {
+        await fetch('/api/sync/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ testOrderId: id }),
+        });
+        setTimeout(refreshAll, 5000);
+      } catch (err) {
+        showToast('❌ Chyba: ' + err.message);
+      }
+    }
+
+    // Auto-refresh every 30s
+    setInterval(refreshAll, 30000);
+
+    // Initial load
+    refreshAll();
+  </script>
+
+</body>
+</html>

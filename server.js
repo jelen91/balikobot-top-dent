@@ -112,6 +112,74 @@ app.get('/api/all-data', async (req, res) => {
   }
 });
 
+// ── Sync Dashboard API ──
+const { runSync, testPohodaConnection, loadSyncLog, loadDb } = require('./sync');
+
+// GET /api/sync/log - sync activity log
+app.get('/api/sync/log', async (req, res) => {
+  try {
+    const log = await loadSyncLog();
+    res.json(log);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/sync/processed - list of processed invoices
+app.get('/api/sync/processed', async (req, res) => {
+  try {
+    const db = await loadDb();
+    res.json(db);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/sync/run - run sync manually (optionally with test invoice)
+app.post('/api/sync/run', express.json(), async (req, res) => {
+  try {
+    const testId = req.body?.testOrderId || null;
+    // Run in background so the request doesn't time out
+    runSync(testId).catch(err => console.error('Sync run error:', err));
+    res.json({ status: 'started', testOrderId: testId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/sync/status - test connections to Pohoda, Balikobot, Upgates
+app.get('/api/sync/status', async (req, res) => {
+  const status = { pohoda: 'unknown', balikobot: 'unknown', upgates: 'unknown' };
+
+  // Test Balikobot
+  try {
+    const bbRes = await fetch(`${API_BASE}/info/carriers`, {
+      headers: { Authorization: AUTH_HEADER, 'Content-Type': 'application/json' },
+    });
+    status.balikobot = bbRes.ok ? 'ok' : 'error';
+  } catch { status.balikobot = 'error'; }
+
+  // Test Pohoda mServer
+  try {
+    const pohodaUrl = (process.env.POHODA_MSERVER_URL || 'http://localhost:7778/xml').replace(/\/xml$/, '/status');
+    const r = await fetch(pohodaUrl, { signal: AbortSignal.timeout(3000) });
+    status.pohoda = r.ok ? 'ok' : (r.status === 401 ? 'auth_error' : 'error');
+  } catch { status.pohoda = 'unreachable'; }
+
+  // Test Upgates
+  try {
+    const ugUrl = process.env.UPGATES_URL || 'https://vase-domena.upgates.com/api/v2';
+    const ugAuth = 'Basic ' + Buffer.from(`${process.env.UPGATES_USER || ''}:${process.env.UPGATES_SECRET || ''}`).toString('base64');
+    const r = await fetch(`${ugUrl}/orders?limit=1`, {
+      headers: { Authorization: ugAuth, 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(5000),
+    });
+    status.upgates = r.ok ? 'ok' : (r.status === 401 ? 'auth_error' : 'error');
+  } catch { status.upgates = 'unreachable'; }
+
+  res.json(status);
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Balikobot Data Viewer running at http://localhost:${PORT}`);
 });

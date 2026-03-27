@@ -25,6 +25,7 @@ const UPGATES_AUTH = 'Basic ' + Buffer.from(`${UPGATES_USER}:${UPGATES_SECRET}`)
 // DATABÁZE PRO UCHOVÁNÍ ZPRACOVANÝCH FAKTUR
 // ----------------------------------------------------
 const DB_FILE = path.join(__dirname, 'processed_invoices.json');
+const LOG_FILE = path.join(__dirname, 'sync_log.json');
 
 async function loadDb() {
   try {
@@ -38,6 +39,39 @@ async function loadDb() {
 
 async function saveDb(db) {
   await fs.writeFile(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+}
+
+// ----------------------------------------------------
+// LOGOVACÍ SYSTÉM
+// ----------------------------------------------------
+async function loadSyncLog() {
+  try {
+    const data = await fs.readFile(LOG_FILE, 'utf8');
+    return JSON.parse(data);
+  } catch (err) {
+    if (err.code === 'ENOENT') return { entries: [], lastRun: null, stats: { total: 0, success: 0, skipped: 0, error: 0 } };
+    throw err;
+  }
+}
+
+async function saveSyncLog(log) {
+  // Keep only last 500 entries
+  if (log.entries.length > 500) log.entries = log.entries.slice(-500);
+  await fs.writeFile(LOG_FILE, JSON.stringify(log, null, 2), 'utf8');
+}
+
+async function addLogEntry(entry) {
+  const log = await loadSyncLog();
+  log.entries.push({
+    timestamp: new Date().toISOString(),
+    ...entry,
+  });
+  log.lastRun = new Date().toISOString();
+  if (entry.status === 'success') log.stats.success++;
+  else if (entry.status === 'skipped') log.stats.skipped++;
+  else if (entry.status === 'error') log.stats.error++;
+  log.stats.total++;
+  await saveSyncLog(log);
 }
 
 // ----------------------------------------------------
@@ -286,18 +320,36 @@ async function runSync(testOrderId = null) {
         await updateUpgatesOrder(inv.upgatesOrderId, pkg.trackingCode, inv.pdfBase64);
 
         if (!testOrderId) {
-          // 4. Uložíme jako hotovou (v test režimu neukládáme, aby se to dalo hrát znova)
           db.processed.push(inv.invoiceNumber);
           await saveDb(db);
         }
         console.log(`🎉 Faktura/Doklad ${inv.invoiceNumber} úspěšně zpracován a odeslán do Upgates.`);
+        await addLogEntry({
+          type: testOrderId ? 'test' : 'sync',
+          status: 'success',
+          invoiceNumber: inv.invoiceNumber,
+          trackingCode: pkg.trackingCode,
+          carrier: pkg.eshop_id || '',
+          message: `Tracking ${pkg.trackingCode} odeslán do Upgates`,
+        });
       } else {
         console.log(`⏳ Balík k dokladu ${inv.invoiceNumber} se v aktuálních datech Balíkobotu nenašel, počkáme do dalšího cyklu.`);
+        await addLogEntry({
+          type: testOrderId ? 'test' : 'sync',
+          status: 'skipped',
+          invoiceNumber: inv.invoiceNumber,
+          message: 'Balík nenalezen v Balíkobotu',
+        });
       }
     }
 
   } catch (err) {
     console.error('❌ Nastala chyba během synchronizace:', err);
+    await addLogEntry({
+      type: 'sync',
+      status: 'error',
+      message: err.message,
+    });
   }
 
   console.log('✅ Synchronizační cyklus dokončen.');
@@ -318,4 +370,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { runSync };
+module.exports = { runSync, testPohodaConnection, loadSyncLog, loadDb };
