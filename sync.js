@@ -48,7 +48,12 @@ async function testPohodaConnection() {
   const url = `${baseUrl}/status?companyDetail`;
   const auth = "Basic " + Buffer.from(`${POHODA_USER}:${POHODA_PASS}`).toString("base64");
 
+  const maskedPass = POHODA_PASS.length > 2 
+    ? POHODA_PASS[0] + "*".repeat(POHODA_PASS.length - 2) + POHODA_PASS[POHODA_PASS.length - 1] 
+    : POHODA_PASS;
+  
   console.log(`🔗 Testuji připojení k Pohoda mServeru na ${url}...`);
+  console.log(`👤 Použité údaje: ${POHODA_USER} : ${maskedPass}`);
 
   try {
     const res = await fetch(url, {
