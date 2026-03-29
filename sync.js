@@ -192,9 +192,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   let filterXml;
   if (testInvoiceNumber) {
     filterXml = `
-      <ftr:number>
-        <typ:numberRequested>${testInvoiceNumber}</typ:numberRequested>
-      </ftr:number>
+      <ftr:number>${testInvoiceNumber}</ftr:number>
       <ftr:invoiceType>issuedInvoice</ftr:invoiceType>`;
   } else {
     const dateFrom = new Date();
@@ -205,17 +203,17 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
       <ftr:invoiceType>issuedInvoice</ftr:invoiceType>`;
   }
 
-  const reqXml = `<?xml version="1.0" encoding="utf-8"?>
+  const reqXml = `<?xml version="1.0" encoding="Windows-1250"?>
 <dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
   xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
-  xmlns:inv="http://www.stormware.cz/schema/version_2/invoice.xsd"
+  xmlns:fac="http://www.stormware.cz/schema/version_2/invoice.xsd"
   xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd"
   xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd">
   <dat:dataPackItem id="1" version="2.0">
-    <inv:invoiceExport>
-      <inv:filter>${filterXml}
-      </inv:filter>
-    </inv:invoiceExport>
+    <fac:invoiceExport>
+      <fac:filter>${filterXml}
+      </fac:filter>
+    </fac:invoiceExport>
   </dat:dataPackItem>
 </dat:dataPack>`;
 
