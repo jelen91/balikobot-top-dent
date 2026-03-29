@@ -208,17 +208,15 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   );
 
   // Filtr podle data - posledních 7 dní (pro test i produkci)
-  // Filtrování na konkrétní fakturu probíhá v JS po stažení
+  // Pohoda XML filter neumožňuje vyhledávat faktury přímo přes <numberOrder> v mServeru.
+  // Proto sáhneme pro více dat (30 dní) při hledání konkrétního testu a následně to vyfiltrujeme v JavaScriptu
+  let daysBack = testInvoiceNumber ? 30 : 1;
+  
   const dateFrom = new Date();
-  dateFrom.setDate(dateFrom.getDate() - 1); // 1 den pro test
+  dateFrom.setDate(dateFrom.getDate() - daysBack);
   const dateFromStr = dateFrom.toISOString().split('T')[0];
 
-  // Filtr sestavíme podle toho, zda hledáme konkrétní objednávku (test) nebo plošně
-  let ftrBlock = `<ftr:filter><ftr:dateFrom>${dateFromStr}</ftr:dateFrom></ftr:filter>`;
-  if (testInvoiceNumber) {
-    // Pokud je zadán --test param, hledáme primárně podle čísla internetové objednávky (případně faktury), takže zrušíme plošné datum a natvrdo zadáme ID
-    ftrBlock = `<ftr:filter><ftr:numberOrder>${testInvoiceNumber}</ftr:numberOrder></ftr:filter>`;
-  }
+  const ftrBlock = `<ftr:filter><ftr:dateFrom>${dateFromStr}</ftr:dateFrom></ftr:filter>`;
 
   const reqXml = `<?xml version="1.0" encoding="UTF-8"?>
 <dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
