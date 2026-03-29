@@ -1,7 +1,6 @@
 require('dotenv').config();
 const fs = require('fs').promises;
 const path = require('path');
-const http = require('http');
 const xml2js = require('xml2js');
 const iconv = require('iconv-lite');
 const logger = require('./logger');
@@ -88,86 +87,42 @@ async function addLogEntry(entry) {
 }
 
 // ----------------------------------------------------
-// POMOCNÁ FUNKCE: POST na Pohoda mServer (nativní http modul)
+// POMOCNÁ FUNKCE: POST na Pohoda mServer
 // ----------------------------------------------------
-function pohodaRequest(xmlBody, label = 'pohoda') {
-  return new Promise((resolve, reject) => {
-    logger.logRequest('Pohoda', 'POST', POHODA_MSERVER_URL, {
+async function pohodaRequest(xmlBody, label = 'pohoda') {
+  logger.logRequest('Pohoda', 'POST', POHODA_MSERVER_URL, {
+    'Content-Type': 'text/xml',
+    'STW-Authorization': '***MASKED***',
+  }, xmlBody);
+
+  console.log(`[Pohoda] Posílám POST na ${POHODA_MSERVER_URL}, body ${xmlBody.length} znaků`);
+
+  const res = await fetch(POHODA_MSERVER_URL, {
+    method: 'POST',
+    headers: {
       'Content-Type': 'text/xml',
-      'STW-Authorization': '***MASKED***',
-    }, xmlBody);
-
-    const bodyBytes = Buffer.from(xmlBody, 'utf8');
-    const url = new URL(POHODA_MSERVER_URL);
-
-    const options = {
-      hostname: url.hostname,
-      port: url.port || 80,
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'text/xml',
-        'Content-Length': bodyBytes.length,
-        'STW-Authorization': POHODA_AUTH,
-        'Connection': 'close',
-      },
-    };
-
-    console.log(`[Pohoda HTTP] Connecting to ${options.hostname}:${options.port}${options.path}`);
-    console.log(`[Pohoda HTTP] Body size: ${bodyBytes.length} bytes`);
-
-    const req = http.request(options, (res) => {
-      console.log(`[Pohoda HTTP] Response status: ${res.statusCode}`);
-      console.log(`[Pohoda HTTP] Response headers: ${JSON.stringify(res.headers)}`);
-      const chunks = [];
-      res.on('data', (chunk) => {
-        chunks.push(chunk);
-        console.log(`[Pohoda HTTP] Received chunk: ${chunk.length} bytes`);
-      });
-      res.on('end', () => {
-        const buffer = Buffer.concat(chunks);
-        let text;
-        try {
-          text = iconv.decode(buffer, 'win1250');
-        } catch {
-          text = buffer.toString('utf8');
-        }
-
-        logger.logResponse('Pohoda', res.statusCode, text, POHODA_MSERVER_URL);
-        const dumpPath = logger.dumpResponse(label, text, 'xml');
-        logger.info('Pohoda', `Raw XML response uložena: ${dumpPath}`);
-
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          reject(new Error(`Pohoda mServer vrátil HTTP ${res.statusCode}: ${text.substring(0, 300)}`));
-        } else {
-          resolve(text);
-        }
-      });
-    });
-
-    req.on('socket', (socket) => {
-      console.log('[Pohoda HTTP] Socket přidělen');
-      socket.on('connect', () => console.log('[Pohoda HTTP] TCP spojení navázáno'));
-      socket.on('close', () => console.log('[Pohoda HTTP] Socket uzavřen'));
-    });
-
-    req.on('finish', () => console.log('[Pohoda HTTP] Request odeslán (finish)'));
-
-    req.setTimeout(60000, () => {
-      console.log('[Pohoda HTTP] TIMEOUT - žádná odpověď do 60s');
-      req.destroy(new Error('Pohoda request timeout po 60s'));
-    });
-
-    req.on('error', (err) => {
-      console.log(`[Pohoda HTTP] Error event: ${err.message}`);
-      reject(err);
-    });
-
-    console.log('[Pohoda HTTP] Zapisuji body a ukončuji request...');
-    req.write(bodyBytes);
-    req.end();
-    console.log('[Pohoda HTTP] req.end() zavolán');
+      'STW-Authorization': POHODA_AUTH,
+    },
+    body: xmlBody,
+    signal: AbortSignal.timeout(60000),
   });
+
+  console.log(`[Pohoda] HTTP status: ${res.status}`);
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+  const text = iconv.decode(buffer, 'win1250');
+
+  console.log(`[Pohoda] Response délka: ${text.length} znaků`);
+
+  logger.logResponse('Pohoda', res.status, text, POHODA_MSERVER_URL);
+  const dumpPath = logger.dumpResponse(label, text, 'xml');
+  logger.info('Pohoda', `Raw XML response uložena: ${dumpPath}`);
+
+  if (!res.ok) {
+    throw new Error(`Pohoda mServer vrátil HTTP ${res.status}: ${text.substring(0, 300)}`);
+  }
+
+  return text;
 }
 
 // ----------------------------------------------------
