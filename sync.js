@@ -757,7 +757,9 @@ async function runSync(testOrderId = null) {
       logger.info('Sync', `Tracking kód z Pohody: ${inv.pohodaShipmentNumber}`);
 
       // Stáhnout PDF faktury z Pohody
-      const pdfBase64 = await fetchInvoicePdfFromPohoda(inv.invoiceNumber, inv.internalId);
+      // --- DOČASNĚ VYPNUTO: Omezujeme integraci pouze na Tracking kódy ---
+      // const pdfBase64 = await fetchInvoicePdfFromPohoda(inv.invoiceNumber, inv.internalId);
+      const pdfBase64 = null;
 
       // Odeslat do Upgates
       let trackingOk = false;
@@ -769,22 +771,23 @@ async function runSync(testOrderId = null) {
         logger.error('Sync', `Chyba při ukládání tracking kódu do Upgates: ${err.message}`);
       }
 
-      if (pdfBase64) {
-        pdfOk = await uploadPdfToUpgates(inv.upgatesOrderId, pdfBase64, inv.invoiceNumber);
-      }
+      // --- VYPNUTO: neuploadujeme PDF do Upgates ---
+      // if (pdfBase64) {
+      //   pdfOk = await uploadPdfToUpgates(inv.upgatesOrderId, pdfBase64, inv.invoiceNumber);
+      // }
 
       if (trackingOk) {
         if (!testOrderId) {
           db.processed.push(inv.invoiceNumber);
           await saveDb(db);
         }
-        logger.info('Sync', `Faktura ${inv.invoiceNumber} zpracována. Tracking: OK, PDF: ${pdfBase64 ? (pdfOk ? 'OK' : 'CHYBA') : 'nedostupné'}`);
+        logger.info('Sync', `Faktura ${inv.invoiceNumber} zpracována. Tracking: OK`);
         await addLogEntry({
           type: testOrderId ? 'test' : 'sync',
           status: 'success',
           invoiceNumber: inv.invoiceNumber,
           trackingCode: inv.pohodaShipmentNumber,
-          message: `Tracking ${inv.pohodaShipmentNumber} uložen. PDF: ${pdfBase64 ? (pdfOk ? 'nahráno' : 'chyba uploadu') : 'nedostupné z Pohody'}`,
+          message: `Tracking ${inv.pohodaShipmentNumber} úspěšně uložen do Upgates.`,
         });
       } else {
         logger.error('Sync', `Faktura ${inv.invoiceNumber} - tracking kód se nepodařilo uložit do Upgates!`);
