@@ -104,7 +104,7 @@ async function pohodaRequest(xmlBody, label = 'pohoda') {
       'STW-Authorization': POHODA_AUTH,
     },
     body: xmlBody,
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(300000), // 5 minut
   });
 
   console.log(`[Pohoda] HTTP status: ${res.status}`);
@@ -216,7 +216,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   // Filtr podle data - posledních 7 dní (pro test i produkci)
   // Filtrování na konkrétní fakturu probíhá v JS po stažení
   const dateFrom = new Date();
-  dateFrom.setDate(dateFrom.getDate() - 7);
+  dateFrom.setDate(dateFrom.getDate() - 1); // 1 den pro test
   const dateFromStr = dateFrom.toISOString().split('T')[0];
 
   const reqXml = `<?xml version="1.0" encoding="UTF-8"?>
