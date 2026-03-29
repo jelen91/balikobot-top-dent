@@ -180,6 +180,20 @@ app.get('/api/sync/status', async (req, res) => {
   res.json(status);
 });
 
+// ── Periodický automatický sync ──
+const SYNC_INTERVAL_MINUTES = parseInt(process.env.SYNC_INTERVAL_MINUTES || '15', 10);
+
+function scheduleSync() {
+  const intervalMs = SYNC_INTERVAL_MINUTES * 60 * 1000;
+  console.log(`⏰ Automatický sync nastaven každých ${SYNC_INTERVAL_MINUTES} minut`);
+  setInterval(() => {
+    console.log(`⏰ Spouštím plánovaný sync...`);
+    runSync().catch(err => console.error('Chyba plánovaného syncu:', err));
+  }, intervalMs);
+}
+
 app.listen(PORT, () => {
-  console.log(`🚀 Balikobot Data Viewer running at http://localhost:${PORT}`);
+  console.log(`🚀 Top-Dent Sync Server běží na http://localhost:${PORT}`);
+  console.log(`📊 Dashboard: http://localhost:${PORT}/dashboard.html`);
+  scheduleSync();
 });
