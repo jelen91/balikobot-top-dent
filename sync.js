@@ -396,7 +396,7 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
     : `<prn:number><typ:numberRequested>${invoiceNumber}</typ:numberRequested></prn:number>`;
 
   const reqXml = `<?xml version="1.0" encoding="utf-8"?>
-<dat:dataPack id="PrintFaktura" ico="${POHODA_ICO}" application="TopDentSync" version="2.0"
+<dat:dataPack id="PrintFaktura" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
   xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
   xmlns:prn="http://www.stormware.cz/schema/version_2/print.xsd"
   xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd">
