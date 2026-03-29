@@ -409,7 +409,9 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
         </ftr:filter>
       </prn:record>
       <prn:printerSettings>
-        <prn:report name="Faktura - danovydoklad"/>
+        <prn:report>
+          <prn:id>190</prn:id>
+        </prn:report>
         <prn:pdf>
           <prn:fileName>faktura_${invoiceNumber}.pdf</prn:fileName>
         </prn:pdf>
