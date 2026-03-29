@@ -1,42 +1,52 @@
 require('dotenv').config();
-const UPGATES_URL = process.env.UPGATES_URL || 'https://topdent.admin.s5.upgates.com/api/v2';
-const UPGATES_USER = process.env.UPGATES_USER || '';
-const UPGATES_SECRET = process.env.UPGATES_SECRET || '';
-const UPGATES_AUTH = 'Basic ' + Buffer.from(`${UPGATES_USER}:${UPGATES_SECRET}`).toString('base64');
+const fetch = require('node-fetch') || globalThis.fetch;
 
-async function test() {
-  const upgatesOrderId = '2604411';
-  let url = `${UPGATES_URL}/orders/${encodeURIComponent(upgatesOrderId)}`;
+async function testMethods() {
+  const UPGATES_URL = process.env.UPGATES_URL || 'https://topdent.admin.s5.upgates.com/api/v2';
+  const UPGATES_USER = process.env.UPGATES_USER || '';
+  const UPGATES_SECRET = process.env.UPGATES_SECRET || '';
+  const UPGATES_AUTH = 'Basic ' + Buffer.from(`${UPGATES_USER}:${UPGATES_SECRET}`).toString('base64');
   
-  console.log('Testing PUT with /orders/2604411...');
+  const orderId = '2604411';
+  const tracking = '26Ez04768';
+
+  console.log('--- TESTOVÁNÍ UPGATES ENDPOINTŮ PRO AKTUALIZACI TRACKINGU ---');
+
+  // 1. Zkouška PUT na kořenný endpoint s polem (Nejčastější u Upgates)
+  let url = `${UPGATES_URL}/orders`;
+  console.log(`\n1. Pokus: PUT ${url}`);
+  let body = JSON.stringify({ orders: [{ order_number: orderId, tracking_code: tracking }] });
   let res = await fetch(url, {
     method: 'PUT',
     headers: { Authorization: UPGATES_AUTH, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tracking_code: "26Ez04768" }),
+    body: body,
   });
-  console.log('PUT status:', res.status);
-  console.log('PUT body:', await res.text());
+  console.log(`HTTP Status: ${res.status}`);
+  console.log(`Body: ${await res.text()}`);
 
-  if (res.status === 501) {
-    console.log('\nTesting POST with /orders/2604411...');
-    url = `${UPGATES_URL}/orders/${encodeURIComponent(upgatesOrderId)}`;
-    res = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: UPGATES_AUTH, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tracking_code: "26Ez04768" }),
-    });
-    console.log('POST status:', res.status);
-    console.log('POST body:', await res.text());
+  // 2. Zkouška POST na konkrétní ID (občas některá API podporují)
+  url = `${UPGATES_URL}/orders/${orderId}`;
+  console.log(`\n2. Pokus: POST ${url}`);
+  body = JSON.stringify({ tracking_code: tracking });
+  res = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: UPGATES_AUTH, 'Content-Type': 'application/json' },
+    body: body,
+  });
+  console.log(`HTTP Status: ${res.status}`);
+  console.log(`Body: ${await res.text()}`);
 
-    console.log('\nTesting PUT with /orders and payload array...');
-    url = `${UPGATES_URL}/orders`;
-    res = await fetch(url, {
-      method: 'PUT',
-      headers: { Authorization: UPGATES_AUTH, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orders: [{ order_number: upgatesOrderId, tracking_code: "26Ez04768" }] }),
-    });
-    console.log('PUT array status:', res.status);
-    console.log('PUT array body:', await res.text());
-  }
+  // 3. Zkouška PUT jen s objektem u kořenového endpointu
+  url = `${UPGATES_URL}/orders`;
+  console.log(`\n3. Pokus: PUT ${url} (bez pole, jen objekt)`);
+  body = JSON.stringify({ order_number: orderId, tracking_code: tracking });
+  res = await fetch(url, {
+    method: 'PUT',
+    headers: { Authorization: UPGATES_AUTH, 'Content-Type': 'application/json' },
+    body: body,
+  });
+  console.log(`HTTP Status: ${res.status}`);
+  console.log(`Body: ${await res.text()}`);
 }
-test();
+
+testMethods();
