@@ -399,7 +399,8 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
 <dat:dataPack id="PrintFaktura" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
   xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
   xmlns:prn="http://www.stormware.cz/schema/version_2/print.xsd"
-  xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd">
+  xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd"
+  xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd">
   <dat:dataPackItem id="1" version="2.0">
     <prn:print version="1.0">
       <prn:record agenda="vydane_faktury">
