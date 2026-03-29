@@ -202,19 +202,19 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   }
 
   const reqXml = `<?xml version="1.0" encoding="Windows-1250"?>
-<dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="1.0" note=""
+<dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
   xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
-  xmlns:lInv="http://www.stormware.cz/schema/version_2/list_invoice.xsd"
+  xmlns:lst="http://www.stormware.cz/schema/version_2/list.xsd"
   xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd"
   xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd">
-  <dat:dataPackItem id="1" version="1.0">
-    <lInv:listInvoiceRequest version="2.0" invoiceVersion="2.0">
-      <lInv:requestInvoice>
+  <dat:dataPackItem id="1" version="2.0">
+    <lst:listInvoiceRequest version="2.0" invoiceType="issuedInvoice" invoiceVersion="2.0">
+      <lst:requestInvoice>
         <ftr:filter>
-          <ftr:invoiceType>issuedInvoice</ftr:invoiceType>${filterXml}
+          ${filterXml}
         </ftr:filter>
-      </lInv:requestInvoice>
-    </lInv:listInvoiceRequest>
+      </lst:requestInvoice>
+    </lst:listInvoiceRequest>
   </dat:dataPackItem>
 </dat:dataPack>`;
 
