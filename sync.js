@@ -85,7 +85,7 @@ async function pohodaRequest(xmlBody, label = 'pohoda') {
   const res = await fetch(POHODA_MSERVER_URL, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/xml; charset=utf-8',
+      'Content-Type': 'text/xml',
       'STW-Authorization': POHODA_AUTH,
     },
     body: xmlBody,
