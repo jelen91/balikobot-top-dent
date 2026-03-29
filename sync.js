@@ -206,7 +206,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   }
 
   const reqXml = `<?xml version="1.0" encoding="utf-8"?>
-<dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0"
+<dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
   xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
   xmlns:inv="http://www.stormware.cz/schema/version_2/invoice.xsd"
   xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd"
