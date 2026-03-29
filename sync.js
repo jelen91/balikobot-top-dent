@@ -109,6 +109,7 @@ function pohodaRequest(xmlBody, label = 'pohoda') {
         'Content-Type': 'text/xml',
         'Content-Length': bodyBytes.length,
         'STW-Authorization': POHODA_AUTH,
+        'Connection': 'close',
       },
     };
 
