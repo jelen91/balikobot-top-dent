@@ -401,7 +401,7 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
   xmlns:prn="http://www.stormware.cz/schema/version_2/print.xsd"
   xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd">
   <dat:dataPackItem id="1" version="2.0">
-    <prn:print version="2.0">
+    <prn:print version="1.0">
       <prn:record agenda="vydane_faktury">
         <prn:filter>
           ${filterXml}
