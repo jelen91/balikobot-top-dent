@@ -580,27 +580,33 @@ async function uploadPdfToUpgates(upgatesOrderId, pdfBase64, invoiceNumber) {
     `Nahrávám PDF faktury ${invoiceNumber} k objednávce ${upgatesOrderId}...`,
   );
 
-  // Pokus 1: POST na /orders/{id}/files (JSON s base64)
-  const url = `${UPGATES_URL}/orders/${encodeURIComponent(upgatesOrderId)}/files`;
+  // Pokus 1: PUT /orders (V Upgates API v2 se vše updatuje hromadně přes 'orders' pole)
+  const url = `${UPGATES_URL}/orders`;
   const body = JSON.stringify({
-    name: `Faktura_${invoiceNumber}.pdf`,
-    file_name: `Faktura_${invoiceNumber}.pdf`,
-    content: pdfBase64,
-    file_content: pdfBase64,
-    type: 'invoice',
-    title: `Faktura ${invoiceNumber}`,
+    orders: [
+      {
+        order_number: upgatesOrderId,
+        files: [
+          {
+            title: `Faktura ${invoiceNumber}`,
+            file_name: `Faktura_${invoiceNumber}.pdf`,
+            file_content: pdfBase64
+          }
+        ]
+      }
+    ]
   });
 
   logger.logRequest(
     'Upgates',
-    'POST',
+    'PUT',
     url,
     { Authorization: '***MASKED***', 'Content-Type': 'application/json' },
     `(body: ${body.length} bytes)`,
   );
 
   const res = await fetch(url, {
-    method: 'POST',
+    method: 'PUT',
     headers: {
       Authorization: UPGATES_AUTH,
       'Content-Type': 'application/json',
@@ -615,41 +621,54 @@ async function uploadPdfToUpgates(upgatesOrderId, pdfBase64, invoiceNumber) {
   if (res.ok) {
     logger.info(
       'Upgates',
-      `PDF faktury ${invoiceNumber} úspěšně nahráno k objednávce ${upgatesOrderId}`,
+      `PDF faktury ${invoiceNumber} úspěšně nahráno k objednávce ${upgatesOrderId} přes 'files' pole`,
     );
     return true;
   }
 
-  // Pokud selže, zkusíme /documents endpoint
+  // Pokud selže na první parametr, API Upgates v2 může vyžadovat 'documents' klíč.
   logger.warn(
     'Upgates',
-    `/files endpoint vrátil ${res.status}, tělo chyby: ${resText}`,
+    `/orders endpoint vrátil ${res.status} pro files, tělo chyby: ${resText}`,
   );
-  const url2 = `${UPGATES_URL}/orders/${encodeURIComponent(upgatesOrderId)}/documents`;
+  
+  const url2 = `${UPGATES_URL}/orders`;
+  const body2 = JSON.stringify({
+    orders: [
+      {
+        order_number: upgatesOrderId,
+        documents: [
+          {
+            title: `Faktura ${invoiceNumber}`,
+            file_name: `Faktura_${invoiceNumber}.pdf`,
+            file_content: pdfBase64
+          }
+        ]
+      }
+    ]
+  });
+
   const res2 = await fetch(url2, {
-    method: 'POST',
+    method: 'PUT',
     headers: {
       Authorization: UPGATES_AUTH,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      title: `Faktura ${invoiceNumber}`,
-      file_name: `Faktura_${invoiceNumber}.pdf`,
-      file_content: pdfBase64,
-    }),
+    body: body2,
   });
+
   const resText2 = await res2.text();
   logger.logResponse('Upgates', res2.status, resText2, url2);
   logger.dumpResponse('upgates_documents', resText2, 'json');
 
   if (res2.ok) {
-    logger.info('Upgates', `PDF úspěšně nahráno přes /documents endpoint`);
+    logger.info('Upgates', `PDF úspěšně nahráno přes 'documents' pole`);
     return true;
   }
 
   logger.error(
     'Upgates',
-    `Ani /files ani /documents endpoint nefungoval. Chyba druhého pokusu: ${resText2}`,
+    `Ani 'files' ani 'documents' pole nefungovalo pro aktualizaci. Chyba druhého pokusu: ${resText2}`,
   );
   return false;
 }
