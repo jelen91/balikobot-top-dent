@@ -210,7 +210,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd"
   xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd">
   <dat:dataPackItem id="1" version="2.0">
-    <fac:invoiceExport>
+    <fac:invoiceExport version="2.0">
       <fac:filter>${filterXml}
       </fac:filter>
     </fac:invoiceExport>
