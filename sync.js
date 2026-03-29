@@ -78,18 +78,21 @@ async function addLogEntry(entry) {
 // ----------------------------------------------------
 async function pohodaRequest(xmlBody, label = 'pohoda') {
   logger.logRequest('Pohoda', 'POST', POHODA_MSERVER_URL, {
-    'Content-Type': 'application/xml',
+    'Content-Type': 'text/xml',
     'STW-Authorization': '***MASKED***',
   }, xmlBody);
+
+  // Pohoda vyžaduje Windows-1250 encoding - enkódujeme tělo správně
+  const bodyBuffer = iconv.encode(xmlBody, 'win1250');
 
   const res = await fetch(POHODA_MSERVER_URL, {
     method: 'POST',
     headers: {
-      'Content-Type': 'text/xml',
+      'Content-Type': 'text/xml; charset=windows-1250',
       'STW-Authorization': POHODA_AUTH,
     },
-    body: xmlBody,
-    signal: AbortSignal.timeout(30000), // 30s timeout
+    body: bodyBuffer,
+    signal: AbortSignal.timeout(30000),
   });
 
   const buffer = Buffer.from(await res.arrayBuffer());
