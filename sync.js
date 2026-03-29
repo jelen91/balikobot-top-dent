@@ -519,10 +519,14 @@ async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
     `Ukládám tracking kód ${trackingCode} k objednávce ${upgatesOrderId}...`,
   );
 
-  const url = `${UPGATES_URL}/orders/${encodeURIComponent(upgatesOrderId)}`;
+  const url = `${UPGATES_URL}/orders`;
   const body = JSON.stringify({
-    tracking_code: trackingCode,
-    // tracking_carrier: carrier, // odkomentovat pokud Upgates API vyžaduje dopravce
+    orders: [
+      {
+        order_number: upgatesOrderId,
+        tracking_code: trackingCode,
+      }
+    ]
   });
 
   logger.logRequest(
