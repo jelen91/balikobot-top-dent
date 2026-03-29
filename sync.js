@@ -1,6 +1,7 @@
 require('dotenv').config();
 const fs = require('fs').promises;
 const path = require('path');
+const http = require('http');
 const xml2js = require('xml2js');
 const iconv = require('iconv-lite');
 const logger = require('./logger');
@@ -87,55 +88,62 @@ async function addLogEntry(entry) {
 }
 
 // ----------------------------------------------------
-// POMOCNÁ FUNKCE: POST na Pohoda mServer
+// POMOCNÁ FUNKCE: POST na Pohoda mServer (nativní http modul)
 // ----------------------------------------------------
-async function pohodaRequest(xmlBody, label = 'pohoda') {
-  logger.logRequest(
-    'Pohoda',
-    'POST',
-    POHODA_MSERVER_URL,
-    {
+function pohodaRequest(xmlBody, label = 'pohoda') {
+  return new Promise((resolve, reject) => {
+    logger.logRequest('Pohoda', 'POST', POHODA_MSERVER_URL, {
       'Content-Type': 'text/xml',
       'STW-Authorization': '***MASKED***',
-    },
-    xmlBody,
-  );
+    }, xmlBody);
 
-  const bodyBytes = Buffer.from(xmlBody, 'utf8');
+    const bodyBytes = Buffer.from(xmlBody, 'utf8');
+    const url = new URL(POHODA_MSERVER_URL);
 
-  const res = await fetch(POHODA_MSERVER_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'text/xml',
-      'Content-Length': String(bodyBytes.length),
-      'STW-Authorization': POHODA_AUTH,
-    },
-    body: bodyBytes,
-    signal: AbortSignal.timeout(60000),
+    const options = {
+      hostname: url.hostname,
+      port: url.port || 80,
+      path: url.pathname,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'text/xml',
+        'Content-Length': bodyBytes.length,
+        'STW-Authorization': POHODA_AUTH,
+      },
+    };
+
+    const req = http.request(options, (res) => {
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('end', () => {
+        const buffer = Buffer.concat(chunks);
+        let text;
+        try {
+          text = iconv.decode(buffer, 'win1250');
+        } catch {
+          text = buffer.toString('utf8');
+        }
+
+        logger.logResponse('Pohoda', res.statusCode, text, POHODA_MSERVER_URL);
+        const dumpPath = logger.dumpResponse(label, text, 'xml');
+        logger.info('Pohoda', `Raw XML response uložena: ${dumpPath}`);
+
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          reject(new Error(`Pohoda mServer vrátil HTTP ${res.statusCode}: ${text.substring(0, 300)}`));
+        } else {
+          resolve(text);
+        }
+      });
+    });
+
+    req.setTimeout(60000, () => {
+      req.destroy(new Error('Pohoda request timeout po 60s'));
+    });
+
+    req.on('error', (err) => reject(err));
+    req.write(bodyBytes);
+    req.end();
   });
-
-  const buffer = Buffer.from(await res.arrayBuffer());
-  // Pohoda vrací Windows-1250, dekódujeme správně
-  let text;
-  try {
-    text = iconv.decode(buffer, 'win1250');
-  } catch {
-    text = buffer.toString('utf8');
-  }
-
-  logger.logResponse('Pohoda', res.status, text, POHODA_MSERVER_URL);
-
-  // Vždy uložit raw response pro debug
-  const dumpPath = logger.dumpResponse(label, text, 'xml');
-  logger.info('Pohoda', `Raw XML response uložena: ${dumpPath}`);
-
-  if (!res.ok) {
-    throw new Error(
-      `Pohoda mServer vrátil HTTP ${res.status}: ${text.substring(0, 300)}`,
-    );
-  }
-
-  return text;
 }
 
 // ----------------------------------------------------
