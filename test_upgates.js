@@ -1,8 +1,31 @@
 require('dotenv').config();
-const fetch = require('node-fetch') || globalThis.fetch;
+const https = require('https');
+
+function request(url, method, auth, bodyObj) {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const bodyStr = JSON.stringify(bodyObj);
+    const options = {
+      method: method,
+      headers: {
+        'Authorization': auth,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(bodyStr)
+      }
+    };
+    const req = https.request(urlObj, options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve({ status: res.statusCode, body: data }));
+    });
+    req.on('error', reject);
+    req.write(bodyStr);
+    req.end();
+  });
+}
 
 async function testMethods() {
-  const UPGATES_URL = process.env.UPGATES_URL || 'https://topdent.admin.s5.upgates.com/api/v2';
+  const UPGATES_URL = (process.env.UPGATES_URL || 'https://topdent.admin.s5.upgates.com/api/v2').replace(/\/$/, '');
   const UPGATES_USER = process.env.UPGATES_USER || '';
   const UPGATES_SECRET = process.env.UPGATES_SECRET || '';
   const UPGATES_AUTH = 'Basic ' + Buffer.from(`${UPGATES_USER}:${UPGATES_SECRET}`).toString('base64');
@@ -12,41 +35,26 @@ async function testMethods() {
 
   console.log('--- TESTOVÁNÍ UPGATES ENDPOINTŮ PRO AKTUALIZACI TRACKINGU ---');
 
-  // 1. Zkouška PUT na kořenný endpoint s polem (Nejčastější u Upgates)
+  // 1. Zkouška PUT na kořenový endpoint s polem (nejčastější u Upgates)
   let url = `${UPGATES_URL}/orders`;
   console.log(`\n1. Pokus: PUT ${url}`);
-  let body = JSON.stringify({ orders: [{ order_number: orderId, tracking_code: tracking }] });
-  let res = await fetch(url, {
-    method: 'PUT',
-    headers: { Authorization: UPGATES_AUTH, 'Content-Type': 'application/json' },
-    body: body,
-  });
+  let res = await request(url, 'PUT', UPGATES_AUTH, { orders: [{ order_number: orderId, tracking_code: tracking }] });
   console.log(`HTTP Status: ${res.status}`);
-  console.log(`Body: ${await res.text()}`);
+  console.log(`Body: ${res.body}`);
 
-  // 2. Zkouška POST na konkrétní ID (občas některá API podporují)
+  // 2. Zkouška POST na konkrétní ID
   url = `${UPGATES_URL}/orders/${orderId}`;
   console.log(`\n2. Pokus: POST ${url}`);
-  body = JSON.stringify({ tracking_code: tracking });
-  res = await fetch(url, {
-    method: 'POST',
-    headers: { Authorization: UPGATES_AUTH, 'Content-Type': 'application/json' },
-    body: body,
-  });
+  res = await request(url, 'POST', UPGATES_AUTH, { tracking_code: tracking });
   console.log(`HTTP Status: ${res.status}`);
-  console.log(`Body: ${await res.text()}`);
+  console.log(`Body: ${res.body}`);
 
-  // 3. Zkouška PUT jen s objektem u kořenového endpointu
+  // 3. Zkouška PUT jen s objektem
   url = `${UPGATES_URL}/orders`;
-  console.log(`\n3. Pokus: PUT ${url} (bez pole, jen objekt)`);
-  body = JSON.stringify({ order_number: orderId, tracking_code: tracking });
-  res = await fetch(url, {
-    method: 'PUT',
-    headers: { Authorization: UPGATES_AUTH, 'Content-Type': 'application/json' },
-    body: body,
-  });
+  console.log(`\n3. Pokus: PUT ${url} (bez pole)`);
+  res = await request(url, 'PUT', UPGATES_AUTH, { order_number: orderId, tracking_code: tracking });
   console.log(`HTTP Status: ${res.status}`);
-  console.log(`Body: ${await res.text()}`);
+  console.log(`Body: ${res.body}`);
 }
 
 testMethods();
