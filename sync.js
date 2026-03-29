@@ -191,7 +191,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   // Filtr - buď konkrétní faktura, nebo posledních 3 dny
   let filterXml;
   if (testInvoiceNumber) {
-    filterXml = `<ftr:selectedNumbers>${testInvoiceNumber}</ftr:selectedNumbers>`;
+    filterXml = `<ftr:number><typ:numberRequested>${testInvoiceNumber}</typ:numberRequested></ftr:number>`;
   } else {
     const dateFrom = new Date();
     dateFrom.setDate(dateFrom.getDate() - 3);
@@ -204,15 +204,17 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   const reqXml = `<?xml version="1.0" encoding="Windows-1250"?>
 <dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
   xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
-  xmlns:fac="http://www.stormware.cz/schema/version_2/invoice.xsd"
+  xmlns:lInv="http://www.stormware.cz/schema/version_2/list_invoice.xsd"
   xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd"
   xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd">
   <dat:dataPackItem id="1" version="2.0">
-    <fac:invoice version="2.0">
-      <fac:filter>
-        <ftr:invoiceType>issuedInvoice</ftr:invoiceType>${filterXml}
-      </fac:filter>
-    </fac:invoice>
+    <lInv:listInvoiceRequest version="2.0" invoiceVersion="2.0">
+      <lInv:requestInvoice>
+        <ftr:filter>
+          <ftr:invoiceType>issuedInvoice</ftr:invoiceType>${filterXml}
+        </ftr:filter>
+      </lInv:requestInvoice>
+    </lInv:listInvoiceRequest>
   </dat:dataPackItem>
 </dat:dataPack>`;
 
