@@ -8,21 +8,29 @@ const logger = require('./logger');
 // ----------------------------------------------------
 // KONFIGURACE
 // ----------------------------------------------------
-const POHODA_MSERVER_URL = process.env.POHODA_MSERVER_URL || 'http://localhost:7778/xml';
+const POHODA_MSERVER_URL =
+  process.env.POHODA_MSERVER_URL || 'http://localhost:7778/xml';
 const POHODA_ICO = process.env.POHODA_ICO || '12345678';
 const POHODA_USER = process.env.POHODA_USER || 'Admin';
 const POHODA_PASS = process.env.POHODA_PASS || '';
-const POHODA_AUTH = 'Basic ' + Buffer.from(`${POHODA_USER}:${POHODA_PASS}`).toString('base64');
+const POHODA_AUTH =
+  'Basic ' + Buffer.from(`${POHODA_USER}:${POHODA_PASS}`).toString('base64');
 
 const BALIKOBOT_API_USER = process.env.BALIKOBOT_API_USER || 'top-dentcz';
 const BALIKOBOT_API_KEY = process.env.BALIKOBOT_API_KEY || '';
 const BALIKOBOT_BASE_URL = 'https://apiv2.balikobot.cz';
-const BALIKOBOT_AUTH = 'Basic ' + Buffer.from(`${BALIKOBOT_API_USER}:${BALIKOBOT_API_KEY}`).toString('base64');
+const BALIKOBOT_AUTH =
+  'Basic ' +
+  Buffer.from(`${BALIKOBOT_API_USER}:${BALIKOBOT_API_KEY}`).toString('base64');
 
-const UPGATES_URL = (process.env.UPGATES_URL || 'https://topdent.admin.s5.upgates.com/api/v2').replace(/\/$/, '');
+const UPGATES_URL = (
+  process.env.UPGATES_URL || 'https://topdent.admin.s5.upgates.com/api/v2'
+).replace(/\/$/, '');
 const UPGATES_USER = process.env.UPGATES_USER || '';
 const UPGATES_SECRET = process.env.UPGATES_SECRET || '';
-const UPGATES_AUTH = 'Basic ' + Buffer.from(`${UPGATES_USER}:${UPGATES_SECRET}`).toString('base64');
+const UPGATES_AUTH =
+  'Basic ' +
+  Buffer.from(`${UPGATES_USER}:${UPGATES_SECRET}`).toString('base64');
 
 // ----------------------------------------------------
 // DATABÁZE PRO UCHOVÁNÍ ZPRACOVANÝCH FAKTUR
@@ -52,7 +60,12 @@ async function loadSyncLog() {
     const data = await fs.readFile(LOG_FILE, 'utf8');
     return JSON.parse(data);
   } catch (err) {
-    if (err.code === 'ENOENT') return { entries: [], lastRun: null, stats: { total: 0, success: 0, skipped: 0, error: 0 } };
+    if (err.code === 'ENOENT')
+      return {
+        entries: [],
+        lastRun: null,
+        stats: { total: 0, success: 0, skipped: 0, error: 0 },
+      };
     throw err;
   }
 }
@@ -77,19 +90,28 @@ async function addLogEntry(entry) {
 // POMOCNÁ FUNKCE: POST na Pohoda mServer
 // ----------------------------------------------------
 async function pohodaRequest(xmlBody, label = 'pohoda') {
-  logger.logRequest('Pohoda', 'POST', POHODA_MSERVER_URL, {
-    'Content-Type': 'text/xml',
-    'STW-Authorization': '***MASKED***',
-  }, xmlBody);
+  logger.logRequest(
+    'Pohoda',
+    'POST',
+    POHODA_MSERVER_URL,
+    {
+      'Content-Type': 'text/xml',
+      'STW-Authorization': '***MASKED***',
+    },
+    xmlBody,
+  );
+
+  const bodyBytes = Buffer.from(xmlBody, 'utf8');
 
   const res = await fetch(POHODA_MSERVER_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'text/xml',
+      'Content-Length': String(bodyBytes.length),
       'STW-Authorization': POHODA_AUTH,
     },
-    body: xmlBody,
-    signal: AbortSignal.timeout(120000), // 120s - Pohoda může být pomalá
+    body: bodyBytes,
+    signal: AbortSignal.timeout(60000),
   });
 
   const buffer = Buffer.from(await res.arrayBuffer());
@@ -108,7 +130,9 @@ async function pohodaRequest(xmlBody, label = 'pohoda') {
   logger.info('Pohoda', `Raw XML response uložena: ${dumpPath}`);
 
   if (!res.ok) {
-    throw new Error(`Pohoda mServer vrátil HTTP ${res.status}: ${text.substring(0, 300)}`);
+    throw new Error(
+      `Pohoda mServer vrátil HTTP ${res.status}: ${text.substring(0, 300)}`,
+    );
   }
 
   return text;
@@ -142,9 +166,12 @@ async function testPohodaConnection() {
   const baseUrl = POHODA_MSERVER_URL.replace(/\/xml$/, '');
   const url = `${baseUrl}/status?companyDetail`;
 
-  const maskedPass = POHODA_PASS.length > 2
-    ? POHODA_PASS[0] + '*'.repeat(POHODA_PASS.length - 2) + POHODA_PASS[POHODA_PASS.length - 1]
-    : POHODA_PASS;
+  const maskedPass =
+    POHODA_PASS.length > 2
+      ? POHODA_PASS[0] +
+        '*'.repeat(POHODA_PASS.length - 2) +
+        POHODA_PASS[POHODA_PASS.length - 1]
+      : POHODA_PASS;
 
   logger.info('Pohoda', `Testuji připojení na ${url}`);
   console.log(`Použité údaje: ${POHODA_USER} : ${maskedPass}`);
@@ -162,12 +189,21 @@ async function testPohodaConnection() {
       logger.info('Pohoda', 'Připojení úspěšné!');
       if (result.mserver && result.mserver.companyDetail) {
         const detail = result.mserver.companyDetail[0];
-        console.log(`   Firma: ${detail.company ? detail.company[0] : 'Neznámá'}`);
-        console.log(`   Databáze: ${detail.databaseName ? detail.databaseName[0] : 'Neznámá'}`);
-        console.log(`   Účetní rok: ${detail.year ? detail.year[0] : 'Neznámý'}`);
+        console.log(
+          `   Firma: ${detail.company ? detail.company[0] : 'Neznámá'}`,
+        );
+        console.log(
+          `   Databáze: ${detail.databaseName ? detail.databaseName[0] : 'Neznámá'}`,
+        );
+        console.log(
+          `   Účetní rok: ${detail.year ? detail.year[0] : 'Neznámý'}`,
+        );
       }
     } else if (res.status === 401) {
-      logger.error('Pohoda', 'CHYBA AUTENTIZACE (401): Jméno nebo heslo je špatně.');
+      logger.error(
+        'Pohoda',
+        'CHYBA AUTENTIZACE (401): Jméno nebo heslo je špatně.',
+      );
     } else if (res.status === 403) {
       logger.error('Pohoda', 'CHYBA (403): Uživatel nemá práva.');
     } else {
@@ -183,15 +219,17 @@ async function testPohodaConnection() {
 // Pokud je zadáno testInvoiceNumber, filtruje podle čísla
 // ----------------------------------------------------
 async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
-  logger.info('Pohoda', testInvoiceNumber
-    ? `Načítám fakturu č. ${testInvoiceNumber} z Pohoda mServeru...`
-    : 'Načítám faktury (poslední 3 dny) z Pohoda mServeru...'
+  logger.info(
+    'Pohoda',
+    testInvoiceNumber
+      ? `Načítám fakturu č. ${testInvoiceNumber} z Pohoda mServeru...`
+      : 'Načítám faktury (poslední 3 dny) z Pohoda mServeru...',
   );
 
   // Filtr podle data - posledních 7 dní (pro test i produkci)
   // Filtrování na konkrétní fakturu probíhá v JS po stažení
   const dateFrom = new Date();
-  dateFrom.setDate(dateFrom.getDate() - (testInvoiceNumber ? 60 : 7));
+  dateFrom.setDate(dateFrom.getDate() - 7);
   const dateFromStr = dateFrom.toISOString().split('T')[0];
 
   const reqXml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -223,21 +261,33 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   let result;
   try {
     result = await parseXml(xmlText);
-    logger.debug('Pohoda', 'Parsovaná struktura XML response', JSON.stringify(result, null, 2).substring(0, 2000));
+    logger.debug(
+      'Pohoda',
+      'Parsovaná struktura XML response',
+      JSON.stringify(result, null, 2).substring(0, 2000),
+    );
   } catch (err) {
     logger.error('Pohoda', `Chyba parsování XML: ${err.message}`);
     throw new Error(`Nelze parsovat XML z Pohody: ${err.message}`);
   }
 
   // Logujeme celou strukturu pro debug - klíčové pro zjištění správné cesty
-  logger.debug('Pohoda', 'Plná parsovaná XML struktura', JSON.stringify(result).substring(0, 3000));
+  logger.debug(
+    'Pohoda',
+    'Plná parsovaná XML struktura',
+    JSON.stringify(result).substring(0, 3000),
+  );
 
   let invoiceItems = [];
   try {
     // Response: responsePack > responsePackItem > listInvoice > invoice
     const pack = result.responsePack;
     if (!pack) {
-      logger.error('Pohoda', 'Chybí responsePack v odpovědi', JSON.stringify(result).substring(0, 500));
+      logger.error(
+        'Pohoda',
+        'Chybí responsePack v odpovědi',
+        JSON.stringify(result).substring(0, 500),
+      );
       throw new Error('Chybí responsePack');
     }
 
@@ -246,7 +296,10 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
 
     for (const item of packItems) {
       if (!item) continue;
-      logger.debug('Pohoda', `responsePackItem state=${item.$?.state}, klíče: ${Object.keys(item).join(', ')}`);
+      logger.debug(
+        'Pohoda',
+        `responsePackItem state=${item.$?.state}, klíče: ${Object.keys(item).join(', ')}`,
+      );
 
       if (item.$?.state === 'error') {
         logger.error('Pohoda', `responsePackItem error: ${item.$?.note}`);
@@ -256,11 +309,17 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
       // listInvoice obsahuje invoice položky
       const listInvoice = item.listInvoice;
       if (!listInvoice) {
-        logger.warn('Pohoda', `responsePackItem neobsahuje listInvoice, klíče: ${Object.keys(item).join(', ')}`);
+        logger.warn(
+          'Pohoda',
+          `responsePackItem neobsahuje listInvoice, klíče: ${Object.keys(item).join(', ')}`,
+        );
         continue;
       }
 
-      logger.debug('Pohoda', `listInvoice klíče: ${Object.keys(listInvoice).join(', ')}`);
+      logger.debug(
+        'Pohoda',
+        `listInvoice klíče: ${Object.keys(listInvoice).join(', ')}`,
+      );
       const invoices = listInvoice.invoice;
       if (!invoices) {
         logger.warn('Pohoda', 'listInvoice neobsahuje žádné faktury');
@@ -270,48 +329,68 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
       invoiceItems.push(...arr);
     }
   } catch (err) {
-    logger.error('Pohoda', `Chyba při procházení XML struktury: ${err.message}`);
+    logger.error(
+      'Pohoda',
+      `Chyba při procházení XML struktury: ${err.message}`,
+    );
     throw new Error(`Nelze extrahovat faktury z XML: ${err.message}`);
   }
 
   logger.info('Pohoda', `Nalezeno ${invoiceItems.length} faktur v odpovědi`);
 
   // Extrahovat data z každé faktury
-  const invoices = invoiceItems.map((inv, idx) => {
-    const header = inv?.invoiceHeader || inv?.['inv:invoiceHeader'] || {};
-    logger.debug('Pohoda', `Faktura ${idx + 1} - klíče headeru: ${Object.keys(header).join(', ')}`);
+  const invoices = invoiceItems
+    .map((inv, idx) => {
+      const header = inv?.invoiceHeader || inv?.['inv:invoiceHeader'] || {};
+      logger.debug(
+        'Pohoda',
+        `Faktura ${idx + 1} - klíče headeru: ${Object.keys(header).join(', ')}`,
+      );
 
-    // Číslo faktury
-    const numberObj = header?.number || header?.['inv:number'];
-    const invoiceNumber = val(numberObj?.numberRequested || numberObj?.['typ:numberRequested'])
-      || val(numberObj);
+      // Číslo faktury
+      const numberObj = header?.number || header?.['inv:number'];
+      const invoiceNumber =
+        val(numberObj?.numberRequested || numberObj?.['typ:numberRequested']) ||
+        val(numberObj);
 
-    // Variabilní symbol - typicky = číslo objednávky z e-shopu
-    const symVar = val(header?.symVar || header?.['inv:symVar']);
+      // Variabilní symbol - typicky = číslo objednávky z e-shopu
+      const symVar = val(header?.symVar || header?.['inv:symVar']);
 
-    // Číslo odběratelské objednávky (může být Upgates order code)
-    const orderNumber = val(header?.orderNumber || header?.['inv:orderNumber']);
+      // Číslo odběratelské objednávky (může být Upgates order code)
+      const orderNumber = val(
+        header?.orderNumber || header?.['inv:orderNumber'],
+      );
 
-    // Interní ID záznamu v Pohodě (pro PDF print request)
-    const internalId = inv?.$?.id || inv?.['$']?.id;
+      // Interní ID záznamu v Pohodě (pro PDF print request)
+      const internalId = inv?.$?.id || inv?.['$']?.id;
 
-    // Datum
-    const date = val(header?.date || header?.['inv:date']);
+      // Datum
+      const date = val(header?.date || header?.['inv:date']);
 
-    logger.debug('Pohoda', `Faktura ${idx + 1}: číslo=${invoiceNumber}, symVar=${symVar}, orderNumber=${orderNumber}, internalId=${internalId}, datum=${date}`);
+      logger.debug(
+        'Pohoda',
+        `Faktura ${idx + 1}: číslo=${invoiceNumber}, symVar=${symVar}, orderNumber=${orderNumber}, internalId=${internalId}, datum=${date}`,
+      );
 
-    return {
-      invoiceNumber,
-      symVar,         // variabilní symbol (= číslo objednávky z e-shopu)
-      orderNumber,    // odběratelské číslo objednávky
-      internalId,     // interní ID záznamu v Pohodě
-      date,
-      // upgatesOrderId = symVar (nebo orderNumber - zjistíme z logů)
-      upgatesOrderId: symVar || orderNumber,
-    };
-  }).filter(inv => inv.invoiceNumber); // vyfiltrovat faktury bez čísla
+      return {
+        invoiceNumber,
+        symVar, // variabilní symbol (= číslo objednávky z e-shopu)
+        orderNumber, // odběratelské číslo objednávky
+        internalId, // interní ID záznamu v Pohodě
+        date,
+        // upgatesOrderId = symVar (nebo orderNumber - zjistíme z logů)
+        upgatesOrderId: symVar || orderNumber,
+      };
+    })
+    .filter((inv) => inv.invoiceNumber); // vyfiltrovat faktury bez čísla
 
-  logger.info('Pohoda', `Zpracováno ${invoices.length} faktur`, invoices.map(i => `${i.invoiceNumber} (upgatesId: ${i.upgatesOrderId})`).join(', '));
+  logger.info(
+    'Pohoda',
+    `Zpracováno ${invoices.length} faktur`,
+    invoices
+      .map((i) => `${i.invoiceNumber} (upgatesId: ${i.upgatesOrderId})`)
+      .join(', '),
+  );
   return invoices;
 }
 
@@ -353,7 +432,10 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
   try {
     xmlText = await pohodaRequest(reqXml, `invoice_pdf_${invoiceNumber}`);
   } catch (err) {
-    logger.error('Pohoda', `Chyba při print requestu pro fakturu ${invoiceNumber}: ${err.message}`);
+    logger.error(
+      'Pohoda',
+      `Chyba při print requestu pro fakturu ${invoiceNumber}: ${err.message}`,
+    );
     return null; // PDF není kritické, synchronizaci nevybočíme
   }
 
@@ -371,15 +453,23 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
     const xmlStr = JSON.stringify(result);
     // Pokud response obsahuje attachment, logujeme a extrahujeme
     if (xmlStr.includes('attachment') || xmlStr.includes('pdf')) {
-      logger.debug('Pohoda', 'Print response obsahuje attachment/pdf klíče', xmlStr.substring(0, 1000));
+      logger.debug(
+        'Pohoda',
+        'Print response obsahuje attachment/pdf klíče',
+        xmlStr.substring(0, 1000),
+      );
     } else {
-      logger.warn('Pohoda', 'Print response NEOBSAHUJE attachment ani pdf - zkontroluj dump soubor!');
+      logger.warn(
+        'Pohoda',
+        'Print response NEOBSAHUJE attachment ani pdf - zkontroluj dump soubor!',
+      );
       return null;
     }
 
     // Pokus o extrakci Base64 z různých možných cest v XML
     const dataPack = result.dataPack || result['dat:dataPack'];
-    const dataPackItem = dataPack?.dataPackItem || dataPack?.['dat:dataPackItem'];
+    const dataPackItem =
+      dataPack?.dataPackItem || dataPack?.['dat:dataPackItem'];
     const items = Array.isArray(dataPackItem) ? dataPackItem : [dataPackItem];
 
     for (const item of items) {
@@ -387,25 +477,43 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
       // nebo jako dat:attachment
       const attachment = item?.attachment || item?.['dat:attachment'];
       if (attachment) {
-        const base64 = val(attachment) || attachment?.data || attachment?.content;
+        const base64 =
+          val(attachment) || attachment?.data || attachment?.content;
         if (base64) {
-          logger.info('Pohoda', `PDF faktury ${invoiceNumber} úspěšně staženo (${String(base64).length} chars base64)`);
+          logger.info(
+            'Pohoda',
+            `PDF faktury ${invoiceNumber} úspěšně staženo (${String(base64).length} chars base64)`,
+          );
           return String(base64).replace(/\s/g, ''); // odstranit whitespace
         }
       }
 
-      const printResponse = item?.printResponse || item?.responsePackItem?.printResponse;
+      const printResponse =
+        item?.printResponse || item?.responsePackItem?.printResponse;
       if (printResponse) {
-        logger.debug('Pohoda', 'Nalezen printResponse element', JSON.stringify(printResponse).substring(0, 500));
-        const pdfData = printResponse?.pdf?.data || printResponse?.pdfData || printResponse?._;
+        logger.debug(
+          'Pohoda',
+          'Nalezen printResponse element',
+          JSON.stringify(printResponse).substring(0, 500),
+        );
+        const pdfData =
+          printResponse?.pdf?.data ||
+          printResponse?.pdfData ||
+          printResponse?._;
         if (pdfData) {
-          logger.info('Pohoda', `PDF faktury ${invoiceNumber} staženo z printResponse`);
+          logger.info(
+            'Pohoda',
+            `PDF faktury ${invoiceNumber} staženo z printResponse`,
+          );
           return String(pdfData).replace(/\s/g, '');
         }
       }
     }
 
-    logger.warn('Pohoda', `PDF faktury ${invoiceNumber} se nepodařilo extrahovat - zkontroluj dump soubor logs/pohoda_responses/`);
+    logger.warn(
+      'Pohoda',
+      `PDF faktury ${invoiceNumber} se nepodařilo extrahovat - zkontroluj dump soubor logs/pohoda_responses/`,
+    );
     return null;
   } catch (err) {
     logger.error('Pohoda', `Chyba při extrakci PDF: ${err.message}`);
@@ -422,32 +530,48 @@ async function fetchAllRecentPackages() {
 
   try {
     const resInfo = await fetch(`${BALIKOBOT_BASE_URL}/info/carriers`, {
-      headers: { 'Authorization': BALIKOBOT_AUTH, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: BALIKOBOT_AUTH,
+        'Content-Type': 'application/json',
+      },
     });
     const infoData = await resInfo.json();
     const carriers = infoData.carriers || [];
     logger.info('Balikobot', `Nalezeno ${carriers.length} dopravců`);
 
     for (const carrier of carriers) {
-      const endpoints = [`/${carrier.slug}/overview`, `/${carrier.slug}/orderview`];
+      const endpoints = [
+        `/${carrier.slug}/overview`,
+        `/${carrier.slug}/orderview`,
+      ];
 
       for (const endp of endpoints) {
         try {
           const res = await fetch(`${BALIKOBOT_BASE_URL}${endp}`, {
-            headers: { 'Authorization': BALIKOBOT_AUTH, 'Content-Type': 'application/json' },
+            headers: {
+              Authorization: BALIKOBOT_AUTH,
+              'Content-Type': 'application/json',
+            },
           });
           const data = await res.json();
           if (data.status !== 200) continue;
 
           let packageIds = [];
-          if (data.packages) packageIds = data.packages.map(p => p.package_id || p.eshop_id);
+          if (data.packages)
+            packageIds = data.packages.map((p) => p.package_id || p.eshop_id);
           else if (data.package_ids) packageIds = data.package_ids;
 
           for (const pid of packageIds) {
             try {
-              const resDet = await fetch(`${BALIKOBOT_BASE_URL}/${carrier.slug}/package/${pid}`, {
-                headers: { 'Authorization': BALIKOBOT_AUTH, 'Content-Type': 'application/json' },
-              });
+              const resDet = await fetch(
+                `${BALIKOBOT_BASE_URL}/${carrier.slug}/package/${pid}`,
+                {
+                  headers: {
+                    Authorization: BALIKOBOT_AUTH,
+                    'Content-Type': 'application/json',
+                  },
+                },
+              );
               const detail = await resDet.json();
               if (detail.eshop_id) {
                 packageMap.set(String(detail.eshop_id), {
@@ -458,16 +582,23 @@ async function fetchAllRecentPackages() {
                   carrier: carrier.slug,
                 });
               }
-            } catch { /* ignorovat chybu jednotlivého balíku */ }
+            } catch {
+              /* ignorovat chybu jednotlivého balíku */
+            }
           }
-        } catch { /* ignorovat chybu endpointu */ }
+        } catch {
+          /* ignorovat chybu endpointu */
+        }
       }
     }
   } catch (err) {
     logger.error('Balikobot', `Chyba při stahování dopravců: ${err.message}`);
   }
 
-  logger.info('Balikobot', `Staženo ${packageMap.size} balíků (eshop_id → tracking kód)`);
+  logger.info(
+    'Balikobot',
+    `Staženo ${packageMap.size} balíků (eshop_id → tracking kód)`,
+  );
   return packageMap;
 }
 
@@ -475,7 +606,10 @@ async function fetchAllRecentPackages() {
 // KROK 3A: AKTUALIZACE TRACKING KÓDU V UPGATES
 // ----------------------------------------------------
 async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
-  logger.info('Upgates', `Ukládám tracking kód ${trackingCode} k objednávce ${upgatesOrderId}...`);
+  logger.info(
+    'Upgates',
+    `Ukládám tracking kód ${trackingCode} k objednávce ${upgatesOrderId}...`,
+  );
 
   const url = `${UPGATES_URL}/orders/${encodeURIComponent(upgatesOrderId)}`;
   const body = JSON.stringify({
@@ -483,12 +617,18 @@ async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
     // tracking_carrier: carrier, // odkomentovat pokud Upgates API vyžaduje dopravce
   });
 
-  logger.logRequest('Upgates', 'PUT', url, { Authorization: '***MASKED***', 'Content-Type': 'application/json' }, body);
+  logger.logRequest(
+    'Upgates',
+    'PUT',
+    url,
+    { Authorization: '***MASKED***', 'Content-Type': 'application/json' },
+    body,
+  );
 
   const res = await fetch(url, {
     method: 'PUT',
     headers: {
-      'Authorization': UPGATES_AUTH,
+      Authorization: UPGATES_AUTH,
       'Content-Type': 'application/json',
     },
     body,
@@ -499,10 +639,15 @@ async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
   logger.dumpResponse('upgates_tracking', resText, 'json');
 
   if (!res.ok) {
-    throw new Error(`Upgates PUT /orders/${upgatesOrderId} vrátil HTTP ${res.status}: ${resText.substring(0, 300)}`);
+    throw new Error(
+      `Upgates PUT /orders/${upgatesOrderId} vrátil HTTP ${res.status}: ${resText.substring(0, 300)}`,
+    );
   }
 
-  logger.info('Upgates', `Tracking kód ${trackingCode} úspěšně uložen k objednávce ${upgatesOrderId}`);
+  logger.info(
+    'Upgates',
+    `Tracking kód ${trackingCode} úspěšně uložen k objednávce ${upgatesOrderId}`,
+  );
   return true;
 }
 
@@ -514,11 +659,17 @@ async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
 // ----------------------------------------------------
 async function uploadPdfToUpgates(upgatesOrderId, pdfBase64, invoiceNumber) {
   if (!pdfBase64) {
-    logger.warn('Upgates', `PDF faktury ${invoiceNumber} není k dispozici, přeskakuji upload`);
+    logger.warn(
+      'Upgates',
+      `PDF faktury ${invoiceNumber} není k dispozici, přeskakuji upload`,
+    );
     return false;
   }
 
-  logger.info('Upgates', `Nahrávám PDF faktury ${invoiceNumber} k objednávce ${upgatesOrderId}...`);
+  logger.info(
+    'Upgates',
+    `Nahrávám PDF faktury ${invoiceNumber} k objednávce ${upgatesOrderId}...`,
+  );
 
   // Pokus 1: POST na /orders/{id}/files (JSON s base64)
   const url = `${UPGATES_URL}/orders/${encodeURIComponent(upgatesOrderId)}/files`;
@@ -531,12 +682,18 @@ async function uploadPdfToUpgates(upgatesOrderId, pdfBase64, invoiceNumber) {
     title: `Faktura ${invoiceNumber}`,
   });
 
-  logger.logRequest('Upgates', 'POST', url, { Authorization: '***MASKED***', 'Content-Type': 'application/json' }, `(body: ${body.length} bytes)`);
+  logger.logRequest(
+    'Upgates',
+    'POST',
+    url,
+    { Authorization: '***MASKED***', 'Content-Type': 'application/json' },
+    `(body: ${body.length} bytes)`,
+  );
 
   const res = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': UPGATES_AUTH,
+      Authorization: UPGATES_AUTH,
       'Content-Type': 'application/json',
     },
     body,
@@ -547,16 +704,25 @@ async function uploadPdfToUpgates(upgatesOrderId, pdfBase64, invoiceNumber) {
   logger.dumpResponse('upgates_pdf_upload', resText, 'json');
 
   if (res.ok) {
-    logger.info('Upgates', `PDF faktury ${invoiceNumber} úspěšně nahráno k objednávce ${upgatesOrderId}`);
+    logger.info(
+      'Upgates',
+      `PDF faktury ${invoiceNumber} úspěšně nahráno k objednávce ${upgatesOrderId}`,
+    );
     return true;
   }
 
   // Pokud selže, zkusíme /documents endpoint
-  logger.warn('Upgates', `/files endpoint vrátil ${res.status}, zkouším /documents...`);
+  logger.warn(
+    'Upgates',
+    `/files endpoint vrátil ${res.status}, zkouším /documents...`,
+  );
   const url2 = `${UPGATES_URL}/orders/${encodeURIComponent(upgatesOrderId)}/documents`;
   const res2 = await fetch(url2, {
     method: 'POST',
-    headers: { 'Authorization': UPGATES_AUTH, 'Content-Type': 'application/json' },
+    headers: {
+      Authorization: UPGATES_AUTH,
+      'Content-Type': 'application/json',
+    },
     body: JSON.stringify({
       title: `Faktura ${invoiceNumber}`,
       file_name: `Faktura_${invoiceNumber}.pdf`,
@@ -572,7 +738,10 @@ async function uploadPdfToUpgates(upgatesOrderId, pdfBase64, invoiceNumber) {
     return true;
   }
 
-  logger.error('Upgates', `Ani /files ani /documents endpoint nefungoval. Zkontroluj dump soubory v logs/pohoda_responses/`);
+  logger.error(
+    'Upgates',
+    `Ani /files ani /documents endpoint nefungoval. Zkontroluj dump soubory v logs/pohoda_responses/`,
+  );
   return false;
 }
 
@@ -599,15 +768,28 @@ async function runSync(testOrderId = null) {
     let invoices = await fetchInvoicesFromPohoda(testOrderId || null);
 
     if (testOrderId && invoices.length === 0) {
-      logger.error('Sync', `Faktura ${testOrderId} nenalezena v Pohodě! Zkontroluj dump XML v logs/pohoda_responses/`);
-      await addLogEntry({ type: 'test', status: 'error', invoiceNumber: testOrderId, message: 'Faktura nenalezena v Pohodě' });
+      logger.error(
+        'Sync',
+        `Faktura ${testOrderId} nenalezena v Pohodě! Zkontroluj dump XML v logs/pohoda_responses/`,
+      );
+      await addLogEntry({
+        type: 'test',
+        status: 'error',
+        invoiceNumber: testOrderId,
+        message: 'Faktura nenalezena v Pohodě',
+      });
       return;
     }
 
     if (!testOrderId) {
       // V produkci přeskočit již zpracované
-      invoices = invoices.filter(inv => !db.processed.includes(inv.invoiceNumber));
-      logger.info('Sync', `${invoices.length} faktur čeká na zpracování (po odfiltrování zpracovaných)`);
+      invoices = invoices.filter(
+        (inv) => !db.processed.includes(inv.invoiceNumber),
+      );
+      logger.info(
+        'Sync',
+        `${invoices.length} faktur čeká na zpracování (po odfiltrování zpracovaných)`,
+      );
     }
 
     if (invoices.length === 0) {
@@ -620,11 +802,22 @@ async function runSync(testOrderId = null) {
 
     // KROK 3: Zpracování každé faktury
     for (const inv of invoices) {
-      logger.info('Sync', `--- Zpracovávám fakturu: ${inv.invoiceNumber} (upgatesOrderId: ${inv.upgatesOrderId}) ---`);
+      logger.info(
+        'Sync',
+        `--- Zpracovávám fakturu: ${inv.invoiceNumber} (upgatesOrderId: ${inv.upgatesOrderId}) ---`,
+      );
 
       if (!inv.upgatesOrderId) {
-        logger.warn('Sync', `Faktura ${inv.invoiceNumber} nemá upgatesOrderId (symVar je prázdný) - přeskakuji`);
-        await addLogEntry({ type: testOrderId ? 'test' : 'sync', status: 'error', invoiceNumber: inv.invoiceNumber, message: 'Chybí symVar (číslo objednávky Upgates)' });
+        logger.warn(
+          'Sync',
+          `Faktura ${inv.invoiceNumber} nemá upgatesOrderId (symVar je prázdný) - přeskakuji`,
+        );
+        await addLogEntry({
+          type: testOrderId ? 'test' : 'sync',
+          status: 'error',
+          invoiceNumber: inv.invoiceNumber,
+          message: 'Chybí symVar (číslo objednávky Upgates)',
+        });
         continue;
       }
 
@@ -632,28 +825,53 @@ async function runSync(testOrderId = null) {
       const pkg = recentPackages.get(String(inv.invoiceNumber));
 
       if (!pkg || !pkg.found) {
-        logger.info('Sync', `Balík k faktuře ${inv.invoiceNumber} nenalezen v Balíkobotu - čekáme na expedici`);
-        await addLogEntry({ type: testOrderId ? 'test' : 'sync', status: 'skipped', invoiceNumber: inv.invoiceNumber, message: 'Balík nenalezen v Balíkobotu' });
+        logger.info(
+          'Sync',
+          `Balík k faktuře ${inv.invoiceNumber} nenalezen v Balíkobotu - čekáme na expedici`,
+        );
+        await addLogEntry({
+          type: testOrderId ? 'test' : 'sync',
+          status: 'skipped',
+          invoiceNumber: inv.invoiceNumber,
+          message: 'Balík nenalezen v Balíkobotu',
+        });
         continue;
       }
 
-      logger.info('Sync', `Balík nalezen! tracking: ${pkg.trackingCode}, dopravce: ${pkg.carrier}`);
+      logger.info(
+        'Sync',
+        `Balík nalezen! tracking: ${pkg.trackingCode}, dopravce: ${pkg.carrier}`,
+      );
 
       // Stáhnout PDF faktury z Pohody
-      const pdfBase64 = await fetchInvoicePdfFromPohoda(inv.invoiceNumber, inv.internalId);
+      const pdfBase64 = await fetchInvoicePdfFromPohoda(
+        inv.invoiceNumber,
+        inv.internalId,
+      );
 
       // Odeslat do Upgates
       let trackingOk = false;
       let pdfOk = false;
 
       try {
-        trackingOk = await updateUpgatesTracking(inv.upgatesOrderId, pkg.trackingCode, pkg.carrier);
+        trackingOk = await updateUpgatesTracking(
+          inv.upgatesOrderId,
+          pkg.trackingCode,
+          pkg.carrier,
+        );
       } catch (err) {
-        logger.error('Sync', `Chyba při ukládání tracking kódu do Upgates: ${err.message}`);
+        logger.error(
+          'Sync',
+          `Chyba při ukládání tracking kódu do Upgates: ${err.message}`,
+        );
       }
 
       if (pdfBase64) {
-        pdfOk = await uploadPdfToUpgates(inv.upgatesOrderId, pdfBase64, inv.invoiceNumber);
+        pdfOk = await uploadPdfToUpgates(
+          inv.upgatesOrderId,
+          pdfBase64,
+          inv.invoiceNumber,
+        );
       }
 
       if (trackingOk) {
@@ -661,7 +879,10 @@ async function runSync(testOrderId = null) {
           db.processed.push(inv.invoiceNumber);
           await saveDb(db);
         }
-        logger.info('Sync', `Faktura ${inv.invoiceNumber} zpracována. Tracking: OK, PDF: ${pdfBase64 ? (pdfOk ? 'OK' : 'CHYBA') : 'nedostupné'}`);
+        logger.info(
+          'Sync',
+          `Faktura ${inv.invoiceNumber} zpracována. Tracking: OK, PDF: ${pdfBase64 ? (pdfOk ? 'OK' : 'CHYBA') : 'nedostupné'}`,
+        );
         await addLogEntry({
           type: testOrderId ? 'test' : 'sync',
           status: 'success',
@@ -671,7 +892,10 @@ async function runSync(testOrderId = null) {
           message: `Tracking ${pkg.trackingCode} uložen. PDF: ${pdfBase64 ? (pdfOk ? 'nahráno' : 'chyba uploadu') : 'nedostupné z Pohody'}`,
         });
       } else {
-        logger.error('Sync', `Faktura ${inv.invoiceNumber} - tracking kód se nepodařilo uložit do Upgates!`);
+        logger.error(
+          'Sync',
+          `Faktura ${inv.invoiceNumber} - tracking kód se nepodařilo uložit do Upgates!`,
+        );
         await addLogEntry({
           type: testOrderId ? 'test' : 'sync',
           status: 'error',
@@ -680,9 +904,12 @@ async function runSync(testOrderId = null) {
         });
       }
     }
-
   } catch (err) {
-    logger.error('Sync', `Kritická chyba synchronizace: ${err.message}`, err.stack);
+    logger.error(
+      'Sync',
+      `Kritická chyba synchronizace: ${err.message}`,
+      err.stack,
+    );
     await addLogEntry({ type: 'sync', status: 'error', message: err.message });
   }
 
