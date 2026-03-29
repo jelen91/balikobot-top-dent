@@ -213,6 +213,13 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   dateFrom.setDate(dateFrom.getDate() - 1); // 1 den pro test
   const dateFromStr = dateFrom.toISOString().split('T')[0];
 
+  // Filtr sestavíme podle toho, zda hledáme konkrétní objednávku (test) nebo plošně
+  let ftrBlock = `<ftr:filter><ftr:dateFrom>${dateFromStr}</ftr:dateFrom></ftr:filter>`;
+  if (testInvoiceNumber) {
+    // Pokud je zadán --test param, hledáme primárně podle čísla internetové objednávky (případně faktury), takže zrušíme plošné datum a natvrdo zadáme ID
+    ftrBlock = `<ftr:filter><ftr:numberOrder>${testInvoiceNumber}</ftr:numberOrder></ftr:filter>`;
+  }
+
   const reqXml = `<?xml version="1.0" encoding="UTF-8"?>
 <dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
   xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
@@ -222,9 +229,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   <dat:dataPackItem id="1" version="2.0">
     <lst:listInvoiceRequest version="2.0" invoiceType="issuedInvoice" invoiceVersion="2.0">
       <lst:requestInvoice>
-        <ftr:filter>
-          <ftr:dateFrom>${dateFromStr}</ftr:dateFrom>
-        </ftr:filter>
+        ${ftrBlock}
       </lst:requestInvoice>
     </lst:listInvoiceRequest>
   </dat:dataPackItem>
@@ -371,7 +376,14 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
         upgatesOrderId: numberOrder, // párujeme podle čísla objednávky
       };
     })
-    .filter((inv) => inv.invoiceNumber); // vyfiltrovat faktury bez čísla
+    .filter((inv) => {
+      if (!inv.invoiceNumber) return false;
+      // Pokud testujeme konkrétní číslo, zahodíme všechny ostatní výsledky
+      if (testInvoiceNumber && inv.upgatesOrderId !== testInvoiceNumber && inv.invoiceNumber !== testInvoiceNumber) {
+        return false;
+      }
+      return true;
+    });
 
   logger.info(
     'Pohoda',
