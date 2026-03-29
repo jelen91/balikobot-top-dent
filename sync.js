@@ -449,8 +449,11 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
     } else {
       logger.warn(
         'Pohoda',
-        'Print response NEOBSAHUJE attachment ani pdf - zkontroluj dump soubor!',
+        'Print response NEOBSAHUJE attachment ani pdf - vypisuji chybové XML do konzole:',
       );
+      console.log('\n--- POHODA XML ODPOVĚĎ ---');
+      console.log(xmlText);
+      console.log('--------------------------\n');
       return null;
     }
 
