@@ -623,7 +623,7 @@ async function uploadPdfToUpgates(upgatesOrderId, pdfBase64, invoiceNumber) {
   // Pokud selže, zkusíme /documents endpoint
   logger.warn(
     'Upgates',
-    `/files endpoint vrátil ${res.status}, zkouším /documents...`,
+    `/files endpoint vrátil ${res.status}, tělo chyby: ${resText}`,
   );
   const url2 = `${UPGATES_URL}/orders/${encodeURIComponent(upgatesOrderId)}/documents`;
   const res2 = await fetch(url2, {
@@ -649,7 +649,7 @@ async function uploadPdfToUpgates(upgatesOrderId, pdfBase64, invoiceNumber) {
 
   logger.error(
     'Upgates',
-    `Ani /files ani /documents endpoint nefungoval. Zkontroluj dump soubory v logs/pohoda_responses/`,
+    `Ani /files ani /documents endpoint nefungoval. Chyba druhého pokusu: ${resText2}`,
   );
   return false;
 }
