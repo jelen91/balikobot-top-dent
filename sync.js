@@ -82,17 +82,14 @@ async function pohodaRequest(xmlBody, label = 'pohoda') {
     'STW-Authorization': '***MASKED***',
   }, xmlBody);
 
-  // Pohoda vyžaduje Windows-1250 encoding - enkódujeme tělo správně
-  const bodyBuffer = iconv.encode(xmlBody, 'win1250');
-
   const res = await fetch(POHODA_MSERVER_URL, {
     method: 'POST',
     headers: {
-      'Content-Type': 'text/xml; charset=windows-1250',
+      'Content-Type': 'text/xml',
       'STW-Authorization': POHODA_AUTH,
     },
-    body: bodyBuffer,
-    signal: AbortSignal.timeout(30000),
+    body: xmlBody,
+    signal: AbortSignal.timeout(120000), // 120s - Pohoda může být pomalá
   });
 
   const buffer = Buffer.from(await res.arrayBuffer());
@@ -194,10 +191,10 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   // Filtr podle data - posledních 7 dní (pro test i produkci)
   // Filtrování na konkrétní fakturu probíhá v JS po stažení
   const dateFrom = new Date();
-  dateFrom.setDate(dateFrom.getDate() - (testInvoiceNumber ? 365 : 7)); // pro test hledáme rok zpět
+  dateFrom.setDate(dateFrom.getDate() - (testInvoiceNumber ? 60 : 7));
   const dateFromStr = dateFrom.toISOString().split('T')[0];
 
-  const reqXml = `<?xml version="1.0" encoding="Windows-1250"?>
+  const reqXml = `<?xml version="1.0" encoding="UTF-8"?>
 <dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
   xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
   xmlns:lst="http://www.stormware.cz/schema/version_2/list.xsd"
