@@ -188,18 +188,11 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
     : 'Načítám faktury (poslední 3 dny) z Pohoda mServeru...'
   );
 
-  // Filtr - buď konkrétní faktura, nebo posledních 3 dny
-  let filterXml;
-  if (testInvoiceNumber) {
-    filterXml = `<ftr:number><typ:numberRequested>${testInvoiceNumber}</typ:numberRequested></ftr:number>`;
-  } else {
-    const dateFrom = new Date();
-    dateFrom.setDate(dateFrom.getDate() - 3);
-    const dateFromStr = dateFrom.toISOString().split('T')[0];
-    filterXml = `
-      <ftr:dateFrom>${dateFromStr}</ftr:dateFrom>
-      <ftr:invoiceType>issuedInvoice</ftr:invoiceType>`;
-  }
+  // Filtr podle data - posledních 7 dní (pro test i produkci)
+  // Filtrování na konkrétní fakturu probíhá v JS po stažení
+  const dateFrom = new Date();
+  dateFrom.setDate(dateFrom.getDate() - (testInvoiceNumber ? 365 : 7)); // pro test hledáme rok zpět
+  const dateFromStr = dateFrom.toISOString().split('T')[0];
 
   const reqXml = `<?xml version="1.0" encoding="Windows-1250"?>
 <dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
@@ -211,7 +204,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
     <lst:listInvoiceRequest version="2.0" invoiceType="issuedInvoice" invoiceVersion="2.0">
       <lst:requestInvoice>
         <ftr:filter>
-          ${filterXml}
+          <ftr:dateFrom>${dateFromStr}</ftr:dateFrom>
         </ftr:filter>
       </lst:requestInvoice>
     </lst:listInvoiceRequest>
@@ -236,40 +229,48 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
     throw new Error(`Nelze parsovat XML z Pohody: ${err.message}`);
   }
 
-  // Navigace strukturou - Pohoda vrací dataPack > dataPackItem > responsePackItem > invoiceList > invoice
-  // Struktura se může lišit podle verze Pohody - logujeme klíče pro debug
-  const rootKeys = Object.keys(result || {});
-  logger.debug('Pohoda', `Root keys v response: ${rootKeys.join(', ')}`);
+  // Logujeme celou strukturu pro debug - klíčové pro zjištění správné cesty
+  logger.debug('Pohoda', 'Plná parsovaná XML struktura', JSON.stringify(result).substring(0, 3000));
 
   let invoiceItems = [];
   try {
-    const dataPack = result.dataPack || result['dat:dataPack'];
-    const dataPackItem = dataPack?.dataPackItem || dataPack?.['dat:dataPackItem'];
-    const items = Array.isArray(dataPackItem) ? dataPackItem : [dataPackItem];
+    // Response: responsePack > responsePackItem > listInvoice > invoice
+    const pack = result.responsePack;
+    if (!pack) {
+      logger.error('Pohoda', 'Chybí responsePack v odpovědi', JSON.stringify(result).substring(0, 500));
+      throw new Error('Chybí responsePack');
+    }
 
-    for (const item of items) {
-      const responsePack = item?.responsePackItem || item?.['dat:responsePackItem'];
-      const responseItems = Array.isArray(responsePack) ? responsePack : [responsePack];
+    const packItem = pack.responsePackItem;
+    const packItems = Array.isArray(packItem) ? packItem : [packItem];
 
-      for (const rItem of responseItems) {
-        if (!rItem) continue;
-        const invoiceList = rItem?.invoiceList || rItem?.['inv:invoiceList'];
-        if (!invoiceList) {
-          logger.warn('Pohoda', 'responsePackItem neobsahuje invoiceList', JSON.stringify(rItem).substring(0, 500));
-          continue;
-        }
-        const invoices = invoiceList?.invoice || invoiceList?.['inv:invoice'];
-        if (!invoices) {
-          logger.warn('Pohoda', 'invoiceList je prázdný');
-          continue;
-        }
-        const arr = Array.isArray(invoices) ? invoices : [invoices];
-        invoiceItems.push(...arr);
+    for (const item of packItems) {
+      if (!item) continue;
+      logger.debug('Pohoda', `responsePackItem state=${item.$?.state}, klíče: ${Object.keys(item).join(', ')}`);
+
+      if (item.$?.state === 'error') {
+        logger.error('Pohoda', `responsePackItem error: ${item.$?.note}`);
+        continue;
       }
+
+      // listInvoice obsahuje invoice položky
+      const listInvoice = item.listInvoice;
+      if (!listInvoice) {
+        logger.warn('Pohoda', `responsePackItem neobsahuje listInvoice, klíče: ${Object.keys(item).join(', ')}`);
+        continue;
+      }
+
+      logger.debug('Pohoda', `listInvoice klíče: ${Object.keys(listInvoice).join(', ')}`);
+      const invoices = listInvoice.invoice;
+      if (!invoices) {
+        logger.warn('Pohoda', 'listInvoice neobsahuje žádné faktury');
+        continue;
+      }
+      const arr = Array.isArray(invoices) ? invoices : [invoices];
+      invoiceItems.push(...arr);
     }
   } catch (err) {
     logger.error('Pohoda', `Chyba při procházení XML struktury: ${err.message}`);
-    logger.debug('Pohoda', 'Plná parsovaná struktura pro debug', JSON.stringify(result));
     throw new Error(`Nelze extrahovat faktury z XML: ${err.message}`);
   }
 
