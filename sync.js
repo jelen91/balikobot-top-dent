@@ -191,9 +191,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   // Filtr - buď konkrétní faktura, nebo posledních 3 dny
   let filterXml;
   if (testInvoiceNumber) {
-    filterXml = `
-      <ftr:number>${testInvoiceNumber}</ftr:number>
-      <ftr:invoiceType>issuedInvoice</ftr:invoiceType>`;
+    filterXml = `<ftr:selectedNumbers>${testInvoiceNumber}</ftr:selectedNumbers>`;
   } else {
     const dateFrom = new Date();
     dateFrom.setDate(dateFrom.getDate() - 3);
@@ -210,10 +208,11 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd"
   xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd">
   <dat:dataPackItem id="1" version="2.0">
-    <fac:invoiceExport version="2.0">
-      <fac:filter>${filterXml}
+    <fac:invoice version="2.0">
+      <fac:filter>
+        <ftr:invoiceType>issuedInvoice</ftr:invoiceType>${filterXml}
       </fac:filter>
-    </fac:invoiceExport>
+    </fac:invoice>
   </dat:dataPackItem>
 </dat:dataPack>`;
 
