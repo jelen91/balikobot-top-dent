@@ -112,9 +112,17 @@ function pohodaRequest(xmlBody, label = 'pohoda') {
       },
     };
 
+    console.log(`[Pohoda HTTP] Connecting to ${options.hostname}:${options.port}${options.path}`);
+    console.log(`[Pohoda HTTP] Body size: ${bodyBytes.length} bytes`);
+
     const req = http.request(options, (res) => {
+      console.log(`[Pohoda HTTP] Response status: ${res.statusCode}`);
+      console.log(`[Pohoda HTTP] Response headers: ${JSON.stringify(res.headers)}`);
       const chunks = [];
-      res.on('data', (chunk) => chunks.push(chunk));
+      res.on('data', (chunk) => {
+        chunks.push(chunk);
+        console.log(`[Pohoda HTTP] Received chunk: ${chunk.length} bytes`);
+      });
       res.on('end', () => {
         const buffer = Buffer.concat(chunks);
         let text;
@@ -136,13 +144,28 @@ function pohodaRequest(xmlBody, label = 'pohoda') {
       });
     });
 
+    req.on('socket', (socket) => {
+      console.log('[Pohoda HTTP] Socket přidělen');
+      socket.on('connect', () => console.log('[Pohoda HTTP] TCP spojení navázáno'));
+      socket.on('close', () => console.log('[Pohoda HTTP] Socket uzavřen'));
+    });
+
+    req.on('finish', () => console.log('[Pohoda HTTP] Request odeslán (finish)'));
+
     req.setTimeout(60000, () => {
+      console.log('[Pohoda HTTP] TIMEOUT - žádná odpověď do 60s');
       req.destroy(new Error('Pohoda request timeout po 60s'));
     });
 
-    req.on('error', (err) => reject(err));
+    req.on('error', (err) => {
+      console.log(`[Pohoda HTTP] Error event: ${err.message}`);
+      reject(err);
+    });
+
+    console.log('[Pohoda HTTP] Zapisuji body a ukončuji request...');
     req.write(bodyBytes);
     req.end();
+    console.log('[Pohoda HTTP] req.end() zavolán');
   });
 }
 
