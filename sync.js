@@ -534,7 +534,7 @@ async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
   );
 
   const res = await fetch(url, {
-    method: 'PUT',
+    method: 'PATCH',
     headers: {
       Authorization: UPGATES_AUTH,
       'Content-Type': 'application/json',
