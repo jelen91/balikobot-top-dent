@@ -440,7 +440,22 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
     return null;
   }
 
-  // Zpracování odpovědi - Hledáme fyzickou cestu nebo Base64 PDF
+  // Zpracování odpovědi - Hledáme fyzickou cestu pomocí RegEx (nejspolehlivější)
+  const pathMatch = xmlText.match(/<rdc:valueProduced[^>]*>(.*?)<\/rdc:valueProduced>/);
+  if (pathMatch && pathMatch[1]) {
+    const pdfPath = pathMatch[1].trim();
+    const fs = require('fs');
+    logger.info('Pohoda', `Načítám exportované PDF z lokálního disku (RegEx detekce): ${pdfPath}`);
+    if (fs.existsSync(pdfPath)) {
+      const fileBuffer = fs.readFileSync(pdfPath);
+      logger.info('Pohoda', `Místní PDF úspěšně nahráno (${fileBuffer.length} bytes)`);
+      return fileBuffer.toString('base64');
+    } else {
+      logger.error('Pohoda', `Soubor fyzicky nenalezen na udané cestě disku: ${pdfPath}`);
+    }
+  }
+
+  // Fallback na starý JSON base64 traversal
   try {
     const dataPack = result.dataPack || result['dat:dataPack'] || result['rsp:responsePack'];
     const dataPackItem = dataPack?.dataPackItem || dataPack?.['dat:dataPackItem'] || dataPack?.['rsp:responsePackItem'];
