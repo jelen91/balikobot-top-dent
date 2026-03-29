@@ -440,78 +440,54 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
     return null;
   }
 
-  // Hledáme 'attachment' element s Base64 PDF
+  // Zpracování odpovědi - Hledáme fyzickou cestu nebo Base64 PDF
   try {
-    const xmlStr = JSON.stringify(result);
-    // Pokud response obsahuje attachment, logujeme a extrahujeme
-    if (xmlStr.includes('attachment') || xmlStr.includes('pdf')) {
-      logger.debug(
-        'Pohoda',
-        'Print response obsahuje attachment/pdf klíče',
-        xmlStr.substring(0, 1000),
-      );
-    } else {
-      logger.warn(
-        'Pohoda',
-        'Print response NEOBSAHUJE attachment ani pdf - vypisuji chybové XML do konzole:',
-      );
-      console.log('\n--- POHODA XML ODPOVĚĎ ---');
-      console.log(xmlText);
-      console.log('--------------------------\n');
-      return null;
-    }
-
-    // Pokus o extrakci Base64 z různých možných cest v XML
-    const dataPack = result.dataPack || result['dat:dataPack'];
-    const dataPackItem =
-      dataPack?.dataPackItem || dataPack?.['dat:dataPackItem'];
+    const dataPack = result.dataPack || result['dat:dataPack'] || result['rsp:responsePack'];
+    const dataPackItem = dataPack?.dataPackItem || dataPack?.['dat:dataPackItem'] || dataPack?.['rsp:responsePackItem'];
     const items = Array.isArray(dataPackItem) ? dataPackItem : [dataPackItem];
 
     for (const item of items) {
-      // Pohoda vrací PDF jako: responsePackItem > printResponse > pdf > data (base64)
-      // nebo jako dat:attachment
-      const attachment = item?.attachment || item?.['dat:attachment'];
-      if (attachment) {
-        const base64 =
-          val(attachment) || attachment?.data || attachment?.content;
-        if (base64) {
-          logger.info(
-            'Pohoda',
-            `PDF faktury ${invoiceNumber} úspěšně staženo (${String(base64).length} chars base64)`,
-          );
-          return String(base64).replace(/\s/g, ''); // odstranit whitespace
+      if (!item) continue;
+
+      // 1. Očekávaná struktura vracející absolutní cestu k uloženému PDF na mServeru
+      let pdfPath = null;
+      
+      // RegEx záchrana (nejspolehlivější u XML -> JSON knihoven, které balí do neznámých polí)
+      const pathMatch = xmlText.match(/<rdc:valueProduced[^>]*>(.*?)<\/rdc:valueProduced>/);
+      if (pathMatch && pathMatch[1]) {
+        pdfPath = pathMatch[1];
+      }
+
+      if (pdfPath && typeof pdfPath === 'string') {
+        const fs = require('fs');
+        logger.info('Pohoda', `Načítám PDF vrácené napřímo z disku mServeru: ${pdfPath}`);
+        if (fs.existsSync(pdfPath)) {
+          const fileBuffer = fs.readFileSync(pdfPath);
+          logger.info('Pohoda', `Místní PDF úspěšně nahráno (${fileBuffer.length} bytes)`);
+          return fileBuffer.toString('base64');
+        } else {
+          logger.error('Pohoda', `Systémový export soubor nenalezen na disku: ${pdfPath}`);
         }
       }
 
-      const printResponse =
-        item?.printResponse || item?.responsePackItem?.printResponse;
+      // 2. Fallback pro Base64 přikládán uvnitř XML (Pohoda verze podpora)
+      const attachment = item.attachment || item['dat:attachment'];
+      if (attachment) {
+        const base64 = typeof attachment === 'object' ? attachment.data || attachment.content || attachment._ : attachment;
+        if (base64) return String(base64).replace(/\s/g, ''); 
+      }
+      
+      const printResponse = item.printResponse || item.responsePackItem?.printResponse;
       if (printResponse) {
-        logger.debug(
-          'Pohoda',
-          'Nalezen printResponse element',
-          JSON.stringify(printResponse).substring(0, 500),
-        );
-        const pdfData =
-          printResponse?.pdf?.data ||
-          printResponse?.pdfData ||
-          printResponse?._;
-        if (pdfData) {
-          logger.info(
-            'Pohoda',
-            `PDF faktury ${invoiceNumber} staženo z printResponse`,
-          );
-          return String(pdfData).replace(/\s/g, '');
-        }
+        const pdfData = printResponse.pdf?.data || printResponse.pdfData || printResponse._;
+        if (pdfData) return String(pdfData).replace(/\s/g, '');
       }
     }
 
-    logger.warn(
-      'Pohoda',
-      `PDF faktury ${invoiceNumber} se nepodařilo extrahovat - zkontroluj dump soubor logs/pohoda_responses/`,
-    );
+    logger.warn('Pohoda', `PDF faktury ${invoiceNumber} se nepodařilo extrahovat z XML ani z disku.`);
     return null;
   } catch (err) {
-    logger.error('Pohoda', `Chyba při extrakci PDF: ${err.message}`);
+    logger.error('Pohoda', `Interní chyba při extrakci PDF: ${err.message}`);
     return null;
   }
 }
