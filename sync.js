@@ -240,7 +240,9 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   try {
     xmlText = await pohodaRequest(reqXml, 'invoice_export');
   } catch (err) {
-    logger.error('Pohoda', `Chyba při volání mServeru: ${err.message}`);
+    const cause = err.cause ? ` | cause: ${err.cause.message || err.cause}` : '';
+    console.log(`[Pohoda] fetch error detail: ${err.message}${cause}`, err.cause || '');
+    logger.error('Pohoda', `Chyba při volání mServeru: ${err.message}${cause}`);
     throw err;
   }
 
