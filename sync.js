@@ -16,12 +16,6 @@ const POHODA_PASS = process.env.POHODA_PASS || '';
 const POHODA_AUTH =
   'Basic ' + Buffer.from(`${POHODA_USER}:${POHODA_PASS}`).toString('base64');
 
-const BALIKOBOT_API_USER = process.env.BALIKOBOT_API_USER || 'top-dentcz';
-const BALIKOBOT_API_KEY = process.env.BALIKOBOT_API_KEY || '';
-const BALIKOBOT_BASE_URL = 'https://apiv2.balikobot.cz';
-const BALIKOBOT_AUTH =
-  'Basic ' +
-  Buffer.from(`${BALIKOBOT_API_USER}:${BALIKOBOT_API_KEY}`).toString('base64');
 
 const UPGATES_URL = (
   process.env.UPGATES_URL || 'https://topdent.admin.s5.upgates.com/api/v2'
@@ -336,39 +330,45 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
         `Faktura ${idx + 1} - klíče headeru: ${Object.keys(header).join(', ')}`,
       );
 
-      // Číslo faktury
+      // Číslo faktury v Pohodě (např. 261204643)
       const numberObj = header?.number || header?.['inv:number'];
       const invoiceNumber =
         val(numberObj?.numberRequested || numberObj?.['typ:numberRequested']) ||
         val(numberObj);
 
-      // Variabilní symbol - typicky = číslo objednávky z e-shopu
-      const symVar = val(header?.symVar || header?.['inv:symVar']);
-
-      // Číslo odběratelské objednávky (může být Upgates order code)
-      const orderNumber = val(
-        header?.orderNumber || header?.['inv:orderNumber'],
-      );
-
       // Interní ID záznamu v Pohodě (pro PDF print request)
-      const internalId = inv?.$?.id || inv?.['$']?.id;
+      const internalId = val(header?.id || header?.['inv:id']) || inv?.$?.id;
+
+      // Číslo objednávky z e-shopu = inv:numberOrder (= Upgates order code)
+      const numberOrder = val(header?.numberOrder || header?.['inv:numberOrder']);
 
       // Datum
       const date = val(header?.date || header?.['inv:date']);
 
-      logger.debug(
-        'Pohoda',
-        `Faktura ${idx + 1}: číslo=${invoiceNumber}, symVar=${symVar}, orderNumber=${orderNumber}, internalId=${internalId}, datum=${date}`,
-      );
+      // Zásilka provázaná s fakturou (inv:linkedDocuments > shipments)
+      const linkedDocs = inv?.linkedDocuments?.link || inv?.['inv:linkedDocuments']?.['typ:link'];
+      const linkedArr = linkedDocs ? (Array.isArray(linkedDocs) ? linkedDocs : [linkedDocs]) : [];
+      const shipmentLink = linkedArr.find(l => {
+        const agenda = val(l?.sourceAgenda || l?.['typ:sourceAgenda']);
+        return agenda === 'shipments';
+      });
+      const pohodaShipmentNumber = shipmentLink
+        ? val(shipmentLink?.sourceDocument?.number || shipmentLink?.['typ:sourceDocument']?.['typ:number'])
+        : null;
+      const pohodaShipmentId = shipmentLink
+        ? val(shipmentLink?.sourceDocument?.id || shipmentLink?.['typ:sourceDocument']?.['typ:id'])
+        : null;
+
+      logger.debug('Pohoda', `Faktura ${idx + 1}: číslo=${invoiceNumber}, internalId=${internalId}, numberOrder=${numberOrder}, shipment=${pohodaShipmentNumber} (id=${pohodaShipmentId}), datum=${date}`);
 
       return {
-        invoiceNumber,
-        symVar, // variabilní symbol (= číslo objednávky z e-shopu)
-        orderNumber, // odběratelské číslo objednávky
-        internalId, // interní ID záznamu v Pohodě
+        invoiceNumber,       // číslo faktury v Pohodě (261204643)
+        internalId,          // interní ID záznamu pro PDF print
+        numberOrder,         // číslo objednávky z e-shopu = Upgates order ID (2604411)
         date,
-        // upgatesOrderId = symVar (nebo orderNumber - zjistíme z logů)
-        upgatesOrderId: symVar || orderNumber,
+        pohodaShipmentNumber, // číslo zásilky v Pohodě (26Ez04768)
+        pohodaShipmentId,     // interní ID zásilky pro fetch trackingu
+        upgatesOrderId: numberOrder, // párujeme podle čísla objednávky
       };
     })
     .filter((inv) => inv.invoiceNumber); // vyfiltrovat faktury bez čísla
@@ -508,87 +508,6 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
     logger.error('Pohoda', `Chyba při extrakci PDF: ${err.message}`);
     return null;
   }
-}
-
-// ----------------------------------------------------
-// KROK 2: BALÍKY Z BALÍKOBOTU
-// ----------------------------------------------------
-async function fetchAllRecentPackages() {
-  logger.info('Balikobot', 'Stahuji aktuální balíky z Balíkobotu...');
-  const packageMap = new Map();
-
-  try {
-    const resInfo = await fetch(`${BALIKOBOT_BASE_URL}/info/carriers`, {
-      headers: {
-        Authorization: BALIKOBOT_AUTH,
-        'Content-Type': 'application/json',
-      },
-    });
-    const infoData = await resInfo.json();
-    const carriers = infoData.carriers || [];
-    logger.info('Balikobot', `Nalezeno ${carriers.length} dopravců`);
-
-    for (const carrier of carriers) {
-      const endpoints = [
-        `/${carrier.slug}/overview`,
-        `/${carrier.slug}/orderview`,
-      ];
-
-      for (const endp of endpoints) {
-        try {
-          const res = await fetch(`${BALIKOBOT_BASE_URL}${endp}`, {
-            headers: {
-              Authorization: BALIKOBOT_AUTH,
-              'Content-Type': 'application/json',
-            },
-          });
-          const data = await res.json();
-          if (data.status !== 200) continue;
-
-          let packageIds = [];
-          if (data.packages)
-            packageIds = data.packages.map((p) => p.package_id || p.eshop_id);
-          else if (data.package_ids) packageIds = data.package_ids;
-
-          for (const pid of packageIds) {
-            try {
-              const resDet = await fetch(
-                `${BALIKOBOT_BASE_URL}/${carrier.slug}/package/${pid}`,
-                {
-                  headers: {
-                    Authorization: BALIKOBOT_AUTH,
-                    'Content-Type': 'application/json',
-                  },
-                },
-              );
-              const detail = await resDet.json();
-              if (detail.eshop_id) {
-                packageMap.set(String(detail.eshop_id), {
-                  found: true,
-                  trackingCode: detail.carrier_id,
-                  packageId: detail.package_id,
-                  labelUrl: detail.label_url,
-                  carrier: carrier.slug,
-                });
-              }
-            } catch {
-              /* ignorovat chybu jednotlivého balíku */
-            }
-          }
-        } catch {
-          /* ignorovat chybu endpointu */
-        }
-      }
-    }
-  } catch (err) {
-    logger.error('Balikobot', `Chyba při stahování dopravců: ${err.message}`);
-  }
-
-  logger.info(
-    'Balikobot',
-    `Staženo ${packageMap.size} balíků (eshop_id → tracking kód)`,
-  );
-  return packageMap;
 }
 
 // ----------------------------------------------------
@@ -786,81 +705,40 @@ async function runSync(testOrderId = null) {
       return;
     }
 
-    // KROK 2: Balíky z Balíkobotu
-    const recentPackages = await fetchAllRecentPackages();
-
-    // KROK 3: Zpracování každé faktury
+    // KROK 2: Zpracování každé faktury
     for (const inv of invoices) {
-      logger.info(
-        'Sync',
-        `--- Zpracovávám fakturu: ${inv.invoiceNumber} (upgatesOrderId: ${inv.upgatesOrderId}) ---`,
-      );
+      logger.info('Sync', `--- Faktura: ${inv.invoiceNumber} | objednávka: ${inv.upgatesOrderId} | zásilka: ${inv.pohodaShipmentNumber || 'není'} ---`);
 
       if (!inv.upgatesOrderId) {
-        logger.warn(
-          'Sync',
-          `Faktura ${inv.invoiceNumber} nemá upgatesOrderId (symVar je prázdný) - přeskakuji`,
-        );
-        await addLogEntry({
-          type: testOrderId ? 'test' : 'sync',
-          status: 'error',
-          invoiceNumber: inv.invoiceNumber,
-          message: 'Chybí symVar (číslo objednávky Upgates)',
-        });
+        logger.warn('Sync', `Faktura ${inv.invoiceNumber} nemá číslo objednávky (numberOrder) - přeskakuji`);
+        await addLogEntry({ type: testOrderId ? 'test' : 'sync', status: 'error', invoiceNumber: inv.invoiceNumber, message: 'Chybí číslo objednávky (numberOrder)' });
         continue;
       }
 
-      // Najít balík v Balíkobotu
-      const pkg = recentPackages.get(String(inv.invoiceNumber));
-
-      if (!pkg || !pkg.found) {
-        logger.info(
-          'Sync',
-          `Balík k faktuře ${inv.invoiceNumber} nenalezen v Balíkobotu - čekáme na expedici`,
-        );
-        await addLogEntry({
-          type: testOrderId ? 'test' : 'sync',
-          status: 'skipped',
-          invoiceNumber: inv.invoiceNumber,
-          message: 'Balík nenalezen v Balíkobotu',
-        });
+      // Tracking číslo bereme přímo z Pohody (linkedDocuments > shipments)
+      if (!inv.pohodaShipmentNumber) {
+        logger.info('Sync', `Faktura ${inv.invoiceNumber} nemá zásilku - objednávka pravděpodobně ještě nebyla expedována`);
+        await addLogEntry({ type: testOrderId ? 'test' : 'sync', status: 'skipped', invoiceNumber: inv.invoiceNumber, message: 'Zásilka zatím není vytvořena v Pohodě' });
         continue;
       }
 
-      logger.info(
-        'Sync',
-        `Balík nalezen! tracking: ${pkg.trackingCode}, dopravce: ${pkg.carrier}`,
-      );
+      logger.info('Sync', `Tracking kód z Pohody: ${inv.pohodaShipmentNumber}`);
 
       // Stáhnout PDF faktury z Pohody
-      const pdfBase64 = await fetchInvoicePdfFromPohoda(
-        inv.invoiceNumber,
-        inv.internalId,
-      );
+      const pdfBase64 = await fetchInvoicePdfFromPohoda(inv.invoiceNumber, inv.internalId);
 
       // Odeslat do Upgates
       let trackingOk = false;
       let pdfOk = false;
 
       try {
-        trackingOk = await updateUpgatesTracking(
-          inv.upgatesOrderId,
-          pkg.trackingCode,
-          pkg.carrier,
-        );
+        trackingOk = await updateUpgatesTracking(inv.upgatesOrderId, inv.pohodaShipmentNumber, null);
       } catch (err) {
-        logger.error(
-          'Sync',
-          `Chyba při ukládání tracking kódu do Upgates: ${err.message}`,
-        );
+        logger.error('Sync', `Chyba při ukládání tracking kódu do Upgates: ${err.message}`);
       }
 
       if (pdfBase64) {
-        pdfOk = await uploadPdfToUpgates(
-          inv.upgatesOrderId,
-          pdfBase64,
-          inv.invoiceNumber,
-        );
+        pdfOk = await uploadPdfToUpgates(inv.upgatesOrderId, pdfBase64, inv.invoiceNumber);
       }
 
       if (trackingOk) {
@@ -868,29 +746,17 @@ async function runSync(testOrderId = null) {
           db.processed.push(inv.invoiceNumber);
           await saveDb(db);
         }
-        logger.info(
-          'Sync',
-          `Faktura ${inv.invoiceNumber} zpracována. Tracking: OK, PDF: ${pdfBase64 ? (pdfOk ? 'OK' : 'CHYBA') : 'nedostupné'}`,
-        );
+        logger.info('Sync', `Faktura ${inv.invoiceNumber} zpracována. Tracking: OK, PDF: ${pdfBase64 ? (pdfOk ? 'OK' : 'CHYBA') : 'nedostupné'}`);
         await addLogEntry({
           type: testOrderId ? 'test' : 'sync',
           status: 'success',
           invoiceNumber: inv.invoiceNumber,
-          trackingCode: pkg.trackingCode,
-          carrier: pkg.carrier,
-          message: `Tracking ${pkg.trackingCode} uložen. PDF: ${pdfBase64 ? (pdfOk ? 'nahráno' : 'chyba uploadu') : 'nedostupné z Pohody'}`,
+          trackingCode: inv.pohodaShipmentNumber,
+          message: `Tracking ${inv.pohodaShipmentNumber} uložen. PDF: ${pdfBase64 ? (pdfOk ? 'nahráno' : 'chyba uploadu') : 'nedostupné z Pohody'}`,
         });
       } else {
-        logger.error(
-          'Sync',
-          `Faktura ${inv.invoiceNumber} - tracking kód se nepodařilo uložit do Upgates!`,
-        );
-        await addLogEntry({
-          type: testOrderId ? 'test' : 'sync',
-          status: 'error',
-          invoiceNumber: inv.invoiceNumber,
-          message: 'Chyba při ukládání tracking kódu do Upgates',
-        });
+        logger.error('Sync', `Faktura ${inv.invoiceNumber} - tracking kód se nepodařilo uložit do Upgates!`);
+        await addLogEntry({ type: testOrderId ? 'test' : 'sync', status: 'error', invoiceNumber: inv.invoiceNumber, message: 'Chyba při ukládání tracking kódu do Upgates' });
       }
     }
   } catch (err) {
