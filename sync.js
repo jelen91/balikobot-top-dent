@@ -392,8 +392,8 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
   // Pohoda print request - generuje PDF přes tiskový report
   // Filtrovat buď podle čísla faktury nebo interního ID
   const filterXml = internalId
-    ? `<prn:id>${internalId}</prn:id>`
-    : `<prn:number><typ:numberRequested>${invoiceNumber}</typ:numberRequested></prn:number>`;
+    ? `<ftr:id>${internalId}</ftr:id>`
+    : `<ftr:number><typ:numberRequested>${invoiceNumber}</typ:numberRequested></ftr:number>`;
 
   const reqXml = `<?xml version="1.0" encoding="utf-8"?>
 <dat:dataPack id="PrintFaktura" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
@@ -403,9 +403,9 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
   <dat:dataPackItem id="1" version="2.0">
     <prn:print version="1.0">
       <prn:record agenda="vydane_faktury">
-        <prn:filter>
+        <ftr:filter>
           ${filterXml}
-        </prn:filter>
+        </ftr:filter>
       </prn:record>
       <prn:printerSettings>
         <prn:pdf>
