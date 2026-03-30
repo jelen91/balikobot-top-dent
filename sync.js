@@ -211,7 +211,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   // Pohoda XML filter neumožňuje vyhledávat faktury přímo přes <numberOrder> v mServeru.
   // Proto sáhneme pro více dat při hledání konkrétního testu a následně to vyfiltrujeme v JavaScriptu.
   // Nastaveno na 5 dní nazpět (místo původních 30), aby mServer nevygeneroval tak obrovské XML a nečekalo se minuty!
-  let daysBack = 1;
+  let daysBack = testInvoiceNumber ? 5 : 1;
   
   const dateFrom = new Date();
   dateFrom.setDate(dateFrom.getDate() - daysBack);
