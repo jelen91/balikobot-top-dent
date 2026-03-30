@@ -519,6 +519,66 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
 }
 
 // ----------------------------------------------------
+// ----------------------------------------------------
+// KROK 2B: NAČTENÍ CARRIER TRACKING KÓDU ZE ZÁSILKY V POHODĚ
+// Pohoda zásilka (Adresář → Zásilky) obsahuje "ID zásilky" = tracking kód dopravce
+// ----------------------------------------------------
+async function fetchCarrierTrackingFromPohoda(shipmentId) {
+  logger.info('Pohoda', `Načítám detail zásilky ID=${shipmentId} pro carrier tracking kód...`);
+
+  const reqXml = `<?xml version="1.0" encoding="UTF-8"?>
+<dat:dataPack id="ExportZasilky" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
+  xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
+  xmlns:lst="http://www.stormware.cz/schema/version_2/list.xsd"
+  xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd">
+  <dat:dataPackItem id="1" version="2.0">
+    <lst:listShipmentRequest version="2.0" shipmentVersion="2.0">
+      <lst:requestShipment>
+        <ftr:filter>
+          <ftr:selectedIDs>
+            <ftr:id>${shipmentId}</ftr:id>
+          </ftr:selectedIDs>
+        </ftr:filter>
+      </lst:requestShipment>
+    </lst:listShipmentRequest>
+  </dat:dataPackItem>
+</dat:dataPack>`;
+
+  let xmlText;
+  try {
+    xmlText = await pohodaRequest(reqXml, `shipment_${shipmentId}`);
+  } catch (err) {
+    logger.error('Pohoda', `Chyba při načítání zásilky ${shipmentId}: ${err.message}`);
+    return null;
+  }
+
+  // Logovat celou odpověď pro debug - nevíme ještě přesnou strukturu
+  logger.debug('Pohoda', `Shipment response (${xmlText.length} chars)`, xmlText.substring(0, 2000));
+
+  // Hledáme carrier tracking kód - zkusíme regex na různá možná pole
+  // Pohoda ho typicky ukládá jako: trackingNumber, carrierTrackingNumber, packageNumber, shipmentId
+  const patterns = [
+    /<[^:>]*:?trackingNumber[^>]*>([^<]+)<\/[^>]+>/i,
+    /<[^:>]*:?carrierTrackingNumber[^>]*>([^<]+)<\/[^>]+>/i,
+    /<[^:>]*:?packageNumber[^>]*>([^<]+)<\/[^>]+>/i,
+    /<[^:>]*:?shipmentId[^>]*>([^<]+)<\/[^>]+>/i,
+    /<[^:>]*:?trackId[^>]*>([^<]+)<\/[^>]+>/i,
+    /<[^:>]*:?carrierNumber[^>]*>([^<]+)<\/[^>]+>/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = xmlText.match(pattern);
+    if (match && match[1] && match[1].trim()) {
+      logger.info('Pohoda', `Carrier tracking kód nalezen (${pattern.source.substring(0, 30)}): ${match[1].trim()}`);
+      return match[1].trim();
+    }
+  }
+
+  // Nic nenalezeno - logujeme celé XML pro ruční analýzu
+  logger.warn('Pohoda', `Carrier tracking kód nenalezen v zásilce ${shipmentId} - zkontroluj dump soubor shipment_${shipmentId}_*.xml`);
+  return null;
+}
+
 // KROK 3A: AKTUALIZACE TRACKING KÓDU V UPGATES
 // ----------------------------------------------------
 async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
@@ -539,14 +599,14 @@ async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
 
   logger.logRequest(
     'Upgates',
-    'PUT',
+    'POST',
     url,
     { Authorization: '***MASKED***', 'Content-Type': 'application/json' },
     body,
   );
 
   const res = await fetch(url, {
-    method: 'PUT',
+    method: 'POST',
     headers: {
       Authorization: UPGATES_AUTH,
       'Content-Type': 'application/json',
@@ -560,7 +620,7 @@ async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
 
   if (!res.ok) {
     throw new Error(
-      `Upgates PUT /orders/${upgatesOrderId} vrátil HTTP ${res.status}: ${resText.substring(0, 300)}`,
+      `Upgates POST /orders vrátil HTTP ${res.status}: ${resText.substring(0, 300)}`,
     );
   }
 
@@ -753,19 +813,20 @@ async function runSync(testOrderId = null) {
         continue;
       }
 
-      logger.info('Sync', `Tracking kód z Pohody: ${inv.pohodaShipmentNumber}`);
+      logger.info('Sync', `Zásilka v Pohodě: ${inv.pohodaShipmentNumber} (ID: ${inv.pohodaShipmentId})`);
 
-      // Stáhnout PDF faktury z Pohody
-      // --- DOČASNĚ VYPNUTO: Omezujeme integraci pouze na Tracking kódy ---
-      // const pdfBase64 = await fetchInvoicePdfFromPohoda(inv.invoiceNumber, inv.internalId);
-      const pdfBase64 = null;
+      // Načíst carrier tracking kód ze zásilky (ID zásilky od dopravce, např. NB4888289662M)
+      const carrierTracking = await fetchCarrierTrackingFromPohoda(inv.pohodaShipmentId);
+      const trackingCode = carrierTracking || inv.pohodaShipmentNumber;
+      logger.info('Sync', `Tracking kód pro Upgates: ${trackingCode} ${carrierTracking ? '(carrier)' : '(fallback - interní číslo Pohody)'}`);
+
+      const pdfBase64 = null; // PDF zatím vypnuto
 
       // Odeslat do Upgates
       let trackingOk = false;
-      let pdfOk = false;
 
       try {
-        trackingOk = await updateUpgatesTracking(inv.upgatesOrderId, inv.pohodaShipmentNumber, null);
+        trackingOk = await updateUpgatesTracking(inv.upgatesOrderId, trackingCode, null);
       } catch (err) {
         logger.error('Sync', `Chyba při ukládání tracking kódu do Upgates: ${err.message}`);
       }
