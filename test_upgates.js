@@ -88,19 +88,19 @@ async function testMethods() {
     console.log(`Body: ${res.body.substring(0, 500)}`);
   }
 
-  // 6. PUT /orders/91536 - update tracking kódu (klíčový test!)
-  url = `${UPGATES_URL}/orders/${internalId}`;
-  console.log(`\n6. Pokus: PUT ${url} (Update tracking kódu přes interní ID - KLÍČOVÝ TEST)`);
-  res = await request(url, 'PUT', UPGATES_AUTH, { tracking_code: "TEST_TRACKING_123" });
+  // 6. PUT /orders s orders polem (správný formát dle chybové hlášky)
+  url = `${UPGATES_URL}/orders`;
+  console.log(`\n6. Pokus: PUT ${url} s {"orders":[{order_number, tracking_code}]} (správný formát)`);
+  res = await request(url, 'PUT', UPGATES_AUTH, { orders: [{ order_number: orderId, tracking_code: "TEST_TRACKING_123" }] });
   console.log(`HTTP Status: ${res.status}`);
   console.log(`Body: ${res.body.substring(0, 500)}`);
 
-  // 7. PATCH /orders/91536
-  url = `${UPGATES_URL}/orders/${internalId}`;
-  console.log(`\n7. Pokus: PATCH ${url} (PATCH jako alternativa k PUT)`);
-  res = await request(url, 'PATCH', UPGATES_AUTH, { tracking_code: "TEST_TRACKING_123" });
+  // 7. PUT /orders s order_id místo order_number
+  url = `${UPGATES_URL}/orders`;
+  console.log(`\n7. Pokus: PUT ${url} s {"orders":[{order_id, tracking_code}]} (přes interní ID)`);
+  res = await request(url, 'PUT', UPGATES_AUTH, { orders: [{ order_id: 91536, tracking_code: "TEST_TRACKING_123" }] });
   console.log(`HTTP Status: ${res.status}`);
-  console.log(`Body: ${res.body.substring(0, 300)}`);
+  console.log(`Body: ${res.body.substring(0, 500)}`);
 }
 
 testMethods();
