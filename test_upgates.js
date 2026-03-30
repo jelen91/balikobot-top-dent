@@ -53,12 +53,19 @@ async function testMethods() {
   console.log(`HTTP Status: ${res.status}`);
   console.log(`Body: ${res.body.substring(0, 150)}...`);
   
-  // 3. Zkouška PUT na order-statuses
+  // 3. GET /orders?order_number= (hledání interního ID)
+  url = `${UPGATES_URL}/orders?order_number=${orderId}`;
+  console.log(`\n3. Pokus: GET ${url} (Hledání interního ID podle čísla objednávky)`);
+  res = await request(url, 'GET', UPGATES_AUTH);
+  console.log(`HTTP Status: ${res.status}`);
+  console.log(`Body: ${res.body.substring(0, 300)}`);
+
+  // 4. PUT na order-statuses
   url = `${UPGATES_URL}/order-statuses`;
-  console.log(`\n3. Pokus: PUT ${url} (Alternativní endpoint pro stavy / tracking)`);
+  console.log(`\n4. Pokus: PUT ${url} (Alternativní endpoint pro stavy / tracking)`);
   res = await request(url, 'PUT', UPGATES_AUTH, { orders: [{ order_number: orderId, tracking_code: "26Ez04768" }] });
   console.log(`HTTP Status: ${res.status}`);
-  console.log(`Body: ${res.body.substring(0, 150)}`);
+  console.log(`Body: ${res.body.substring(0, 300)}`);
 }
 
 testMethods();
