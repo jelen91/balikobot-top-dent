@@ -580,51 +580,14 @@ async function fetchCarrierTrackingFromPohoda(shipmentId) {
 }
 
 // KROK 3A: AKTUALIZACE TRACKING KÓDU V UPGATES
-// Nejdřív GET pro nalezení interního Upgates ID objednávky,
-// pak PUT /orders/{id} s tracking kódem.
+// PUT /orders s polem orders - správný formát Upgates API v2
+// Endpoint: PUT /orders, body: {"orders": [{"order_number": "...", "tracking_code": "..."}]}
 // ----------------------------------------------------
-async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
+async function updateUpgatesTracking(upgatesOrderId, trackingCode) {
   logger.info('Upgates', `Ukládám tracking kód ${trackingCode} k objednávce ${upgatesOrderId}...`);
 
-  // Krok 1: Najít interní Upgates ID objednávky podle čísla objednávky
-  const searchUrl = `${UPGATES_URL}/orders?order_number=${encodeURIComponent(upgatesOrderId)}`;
-  logger.info('Upgates', `GET ${searchUrl}`);
-
-  const searchRes = await fetch(searchUrl, {
-    headers: { Authorization: UPGATES_AUTH, 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(15000),
-  });
-  const searchText = await searchRes.text();
-  logger.logResponse('Upgates', searchRes.status, searchText, searchUrl);
-  logger.dumpResponse('upgates_order_search', searchText, 'json');
-
-  if (!searchRes.ok) {
-    throw new Error(`Upgates GET /orders?order_number=${upgatesOrderId} vrátil HTTP ${searchRes.status}: ${searchText.substring(0, 200)}`);
-  }
-
-  // Extrahovat interní ID z response
-  let internalId = null;
-  try {
-    const data = JSON.parse(searchText);
-    // Upgates typicky vrací { orders: [{ id: 123, order_number: "2604411", ... }] }
-    const orders = data.orders || data.data || (Array.isArray(data) ? data : null);
-    logger.debug('Upgates', `Nalezeno ${orders?.length || 0} objednávek, klíče první: ${orders?.[0] ? Object.keys(orders[0]).join(', ') : 'N/A'}`);
-    if (orders && orders.length > 0) {
-      internalId = orders[0].id || orders[0].order_id || orders[0].internal_id;
-    }
-  } catch (err) {
-    logger.error('Upgates', `Chyba parsování search response: ${err.message}`);
-  }
-
-  if (!internalId) {
-    throw new Error(`Nepodařilo se najít interní Upgates ID pro objednávku ${upgatesOrderId} - zkontroluj upgates_order_search dump`);
-  }
-
-  logger.info('Upgates', `Interní Upgates ID objednávky: ${internalId}`);
-
-  // Krok 2: PUT /orders/{id} s tracking kódem
-  const updateUrl = `${UPGATES_URL}/orders/${internalId}`;
-  const body = JSON.stringify({ tracking_code: trackingCode });
+  const updateUrl = `${UPGATES_URL}/orders`;
+  const body = JSON.stringify({ orders: [{ order_number: String(upgatesOrderId), tracking_code: trackingCode }] });
 
   logger.logRequest('Upgates', 'PUT', updateUrl, { Authorization: '***MASKED***' }, body);
 
@@ -640,10 +603,23 @@ async function updateUpgatesTracking(upgatesOrderId, trackingCode, _carrier) {
   logger.dumpResponse('upgates_tracking', resText, 'json');
 
   if (!res.ok) {
-    throw new Error(`Upgates PUT /orders/${internalId} vrátil HTTP ${res.status}: ${resText.substring(0, 300)}`);
+    throw new Error(`Upgates PUT /orders vrátil HTTP ${res.status}: ${resText.substring(0, 300)}`);
   }
 
-  logger.info('Upgates', `Tracking kód ${trackingCode} úspěšně uložen k objednávce ${upgatesOrderId} (interní ID: ${internalId})`);
+  // Zkontrolovat updated_yn v response
+  try {
+    const data = JSON.parse(resText);
+    const orderResult = data.orders?.[0];
+    if (orderResult && !orderResult.updated_yn) {
+      const msgs = orderResult.messages?.map(m => m.message).join(', ') || 'unknown';
+      throw new Error(`Upgates neaktualizoval objednávku ${upgatesOrderId}: ${msgs}`);
+    }
+  } catch (parseErr) {
+    if (parseErr.message.includes('neaktualizoval')) throw parseErr;
+    // JSON parse chyba - ignorujeme, HTTP 200 stačí
+  }
+
+  logger.info('Upgates', `Tracking kód ${trackingCode} úspěšně uložen k objednávce ${upgatesOrderId}`);
   return true;
 }
 

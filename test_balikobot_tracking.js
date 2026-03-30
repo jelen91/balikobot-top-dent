@@ -57,13 +57,11 @@ async function main() {
       const packages = data.packages || data.data || [];
       if (packages.length === 0) continue;
       console.log(`\n  ${carrier.slug} (${carrier.name}) - ${packages.length} zásilek:`);
-      // Ukázat strukturu prvního balíčku
+      // Ukázat strukturu prvního balíčku - VŠECHNA neprázdná pole
       const first = packages[0];
       console.log(`  Klíče balíčku: ${Object.keys(first).join(', ')}`);
-      // Vypsat klíčová pole
-      const trackFields = ['carrier_id', 'vs', 'order_number', 'eid', 'rec_name', 'tracking_number', 'package_number'];
-      for (const f of trackFields) {
-        if (first[f] !== undefined) console.log(`    ${f}: ${first[f]}`);
+      for (const [k, v] of Object.entries(first)) {
+        if (v !== null && v !== '' && v !== 0 && v !== false) console.log(`    ${k}: ${JSON.stringify(v)}`);
       }
     } catch (e) { /* skip */ }
   }
@@ -85,9 +83,9 @@ async function main() {
       if (pkgRes.status !== 200) continue;
       const pkg = JSON.parse(pkgRes.body);
       console.log(`  Klíče balíčku: ${Object.keys(pkg).join(', ')}`);
-      const trackFields = ['carrier_id', 'vs', 'order_number', 'eid', 'rec_name', 'tracking_number', 'package_number', 'label_url'];
-      for (const f of trackFields) {
-        if (pkg[f] !== undefined) console.log(`    ${f}: ${pkg[f]}`);
+      // Vypsat VŠECHNA neprázdná pole - hledáme eshop_id, order_id, vs, order_number
+      for (const [k, v] of Object.entries(pkg)) {
+        if (v !== null && v !== '' && v !== 0 && v !== false) console.log(`    ${k}: ${JSON.stringify(v)}`);
       }
     } catch (e) { /* skip */ }
   }
