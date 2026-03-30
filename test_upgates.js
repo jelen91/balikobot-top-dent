@@ -63,7 +63,42 @@ async function testMethods() {
   // 4. PUT na order-statuses
   url = `${UPGATES_URL}/order-statuses`;
   console.log(`\n4. Pokus: PUT ${url} (Alternativní endpoint pro stavy / tracking)`);
-  res = await request(url, 'PUT', UPGATES_AUTH, { orders: [{ order_number: orderId, tracking_code: "26Ez04768" }] });
+  res = await request(url, 'PUT', UPGATES_AUTH, { orders: [{ order_number: orderId, tracking_code: "TEST_TRACKING_123" }] });
+  console.log(`HTTP Status: ${res.status}`);
+  console.log(`Body: ${res.body.substring(0, 300)}`);
+
+  // 5. GET /orders/91536 - plný detail objednávky (hledáme tracking_code pole a dalsi klice)
+  const internalId = '91536'; // order_id z předchozího GET
+  url = `${UPGATES_URL}/orders/${internalId}`;
+  console.log(`\n5. Pokus: GET ${url} (Plný detail objednávky - zjistit pole pro tracking)`);
+  res = await request(url, 'GET', UPGATES_AUTH);
+  console.log(`HTTP Status: ${res.status}`);
+  // Vypsat celé tělo - chceme vidět všechny klíče
+  try {
+    const parsed = JSON.parse(res.body);
+    const order = parsed.orders?.[0] || parsed;
+    console.log('Klíče objednávky:', Object.keys(order).join(', '));
+    // Hledej tracking-related pole
+    for (const [k, v] of Object.entries(order)) {
+      if (typeof v === 'string' || typeof v === 'number') {
+        console.log(`  ${k}: ${v}`);
+      }
+    }
+  } catch (e) {
+    console.log(`Body: ${res.body.substring(0, 500)}`);
+  }
+
+  // 6. PUT /orders/91536 - update tracking kódu (klíčový test!)
+  url = `${UPGATES_URL}/orders/${internalId}`;
+  console.log(`\n6. Pokus: PUT ${url} (Update tracking kódu přes interní ID - KLÍČOVÝ TEST)`);
+  res = await request(url, 'PUT', UPGATES_AUTH, { tracking_code: "TEST_TRACKING_123" });
+  console.log(`HTTP Status: ${res.status}`);
+  console.log(`Body: ${res.body.substring(0, 500)}`);
+
+  // 7. PATCH /orders/91536
+  url = `${UPGATES_URL}/orders/${internalId}`;
+  console.log(`\n7. Pokus: PATCH ${url} (PATCH jako alternativa k PUT)`);
+  res = await request(url, 'PATCH', UPGATES_AUTH, { tracking_code: "TEST_TRACKING_123" });
   console.log(`HTTP Status: ${res.status}`);
   console.log(`Body: ${res.body.substring(0, 300)}`);
 }
