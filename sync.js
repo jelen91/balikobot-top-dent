@@ -26,6 +26,12 @@ const UPGATES_AUTH =
   'Basic ' +
   Buffer.from(`${UPGATES_USER}:${UPGATES_SECRET}`).toString('base64');
 
+const BB_API_BASE = 'https://apiv2.balikobot.cz';
+const BB_USER = process.env.BALIKOBOT_API_USER || '';
+const BB_KEY  = process.env.BALIKOBOT_API_KEY  || '';
+const BB_AUTH = 'Basic ' + Buffer.from(`${BB_USER}:${BB_KEY}`).toString('base64');
+const BB_HEADERS = { Authorization: BB_AUTH, 'Content-Type': 'application/json' };
+
 // ----------------------------------------------------
 // DATABÁZE PRO UCHOVÁNÍ ZPRACOVANÝCH FAKTUR
 // ----------------------------------------------------
@@ -519,64 +525,82 @@ async function fetchInvoicePdfFromPohoda(invoiceNumber, internalId = null) {
 }
 
 // ----------------------------------------------------
+// KROK 2B: SESTAVENÍ CACHE TRACKING KÓDŮ Z BALIKOBOTU
+// Balikobot eshop_id = "{pohodaShipmentId}-B" → carrier_id = tracking kód dopravce
+// Funguje pro všechny dopravce (CP, PPL, DPD, Zásilkovna, GLS, ...)
 // ----------------------------------------------------
-// KROK 2B: NAČTENÍ CARRIER TRACKING KÓDU ZE ZÁSILKY V POHODĚ
-// Pohoda zásilka (Adresář → Zásilky) obsahuje "ID zásilky" = tracking kód dopravce
-// ----------------------------------------------------
-async function fetchCarrierTrackingFromPohoda(shipmentId) {
-  logger.info('Pohoda', `Načítám detail zásilky ID=${shipmentId} pro carrier tracking kód...`);
+async function buildBalikobotTrackingCache() {
+  logger.info('Balikobot', 'Sestavuji cache tracking kódů z Balikobotu...');
+  const cache = {}; // eshop_id -> carrier_id
 
-  const reqXml = `<?xml version="1.0" encoding="UTF-8"?>
-<dat:dataPack id="ExportZasilky" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
-  xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
-  xmlns:lst="http://www.stormware.cz/schema/version_2/list.xsd"
-  xmlns:ftr="http://www.stormware.cz/schema/version_2/filter.xsd">
-  <dat:dataPackItem id="1" version="2.0">
-    <lst:listShipmentRequest version="2.0" shipmentVersion="2.0">
-      <lst:requestShipment>
-        <ftr:filter>
-          <ftr:selectedIDs>
-            <ftr:id>${shipmentId}</ftr:id>
-          </ftr:selectedIDs>
-        </ftr:filter>
-      </lst:requestShipment>
-    </lst:listShipmentRequest>
-  </dat:dataPackItem>
-</dat:dataPack>`;
-
-  let xmlText;
+  // Získat seznam dopravců
+  let carriers = [];
   try {
-    xmlText = await pohodaRequest(reqXml, `shipment_${shipmentId}`);
+    const res = await fetch(`${BB_API_BASE}/info/carriers`, {
+      headers: BB_HEADERS,
+      signal: AbortSignal.timeout(10000),
+    });
+    const data = await res.json();
+    carriers = data.carriers || [];
   } catch (err) {
-    logger.error('Pohoda', `Chyba při načítání zásilky ${shipmentId}: ${err.message}`);
-    return null;
+    logger.error('Balikobot', `Nelze načíst seznam dopravců: ${err.message}`);
+    return cache;
   }
 
-  // Logovat celou odpověď pro debug - nevíme ještě přesnou strukturu
-  logger.debug('Pohoda', `Shipment response (${xmlText.length} chars)`, xmlText.substring(0, 2000));
+  // Pro každého dopravce: overview (aktuální batch) + orderview (poslední odeslaný batch)
+  await Promise.allSettled(carriers.map(async (carrier) => {
+    try {
+      // 1. Overview: aktuální neodeslaný batch - eshop_id přímo dostupné
+      const ovRes = await fetch(`${BB_API_BASE}/${carrier.slug}/overview`, {
+        headers: BB_HEADERS,
+        signal: AbortSignal.timeout(5000),
+      });
+      if (ovRes.ok) {
+        const ovData = await ovRes.json();
+        const packages = ovData.packages || ovData.data || [];
+        for (const pkg of packages) {
+          if (pkg.eshop_id && pkg.carrier_id) cache[pkg.eshop_id] = pkg.carrier_id;
+        }
+      }
+    } catch (_) { /* ignore */ }
 
-  // Hledáme carrier tracking kód - zkusíme regex na různá možná pole
-  // Pohoda ho typicky ukládá jako: trackingNumber, carrierTrackingNumber, packageNumber, shipmentId
-  const patterns = [
-    /<[^:>]*:?trackingNumber[^>]*>([^<]+)<\/[^>]+>/i,
-    /<[^:>]*:?carrierTrackingNumber[^>]*>([^<]+)<\/[^>]+>/i,
-    /<[^:>]*:?packageNumber[^>]*>([^<]+)<\/[^>]+>/i,
-    /<[^:>]*:?shipmentId[^>]*>([^<]+)<\/[^>]+>/i,
-    /<[^:>]*:?trackId[^>]*>([^<]+)<\/[^>]+>/i,
-    /<[^:>]*:?carrierNumber[^>]*>([^<]+)<\/[^>]+>/i,
-  ];
+    try {
+      // 2. Orderview: poslední odeslaný batch - nutné načíst detaily každého balíčku
+      const orRes = await fetch(`${BB_API_BASE}/${carrier.slug}/orderview`, {
+        headers: BB_HEADERS,
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!orRes.ok) return;
+      const orData = await orRes.json();
+      if (orData.status !== 200 || !orData.package_ids?.length) return;
 
-  for (const pattern of patterns) {
-    const match = xmlText.match(pattern);
-    if (match && match[1] && match[1].trim()) {
-      logger.info('Pohoda', `Carrier tracking kód nalezen (${pattern.source.substring(0, 30)}): ${match[1].trim()}`);
-      return match[1].trim();
-    }
-  }
+      const pkgIds = orData.package_ids.slice(0, 200); // max 200 balíčků na dopravce
+      const pkgResults = await Promise.allSettled(
+        pkgIds.map(pkgId =>
+          fetch(`${BB_API_BASE}/${carrier.slug}/package/${pkgId}`, {
+            headers: BB_HEADERS,
+            signal: AbortSignal.timeout(5000),
+          }).then(r => r.json())
+        )
+      );
+      for (const result of pkgResults) {
+        if (result.status === 'fulfilled') {
+          const pkg = result.value;
+          if (pkg.eshop_id && pkg.carrier_id) cache[pkg.eshop_id] = pkg.carrier_id;
+        }
+      }
+    } catch (_) { /* ignore */ }
+  }));
 
-  // Nic nenalezeno - logujeme celé XML pro ruční analýzu
-  logger.warn('Pohoda', `Carrier tracking kód nenalezen v zásilce ${shipmentId} - zkontroluj dump soubor shipment_${shipmentId}_*.xml`);
-  return null;
+  logger.info('Balikobot', `Cache sestavena: ${Object.keys(cache).length} balíčků`);
+  return cache;
+}
+
+// Lookup tracking kódu z cache podle Pohoda shipment ID
+// eshop_id v Balikobotu = "{pohodaShipmentId}-B"
+function getTrackingFromCache(pohodaShipmentId, cache) {
+  if (!pohodaShipmentId) return null;
+  return cache[`${pohodaShipmentId}-B`] || null;
 }
 
 // KROK 3A: AKTUALIZACE TRACKING KÓDU V UPGATES
@@ -788,7 +812,10 @@ async function runSync(testOrderId = null) {
       return;
     }
 
-    // KROK 2: Zpracování každé faktury
+    // KROK 2: Sestavit Balikobot tracking cache (jednou pro celý sync)
+    const trackingCache = await buildBalikobotTrackingCache();
+
+    // KROK 3: Zpracování každé faktury
     for (const inv of invoices) {
       logger.info('Sync', `--- Faktura: ${inv.invoiceNumber} | objednávka: ${inv.upgatesOrderId} | zásilka: ${inv.pohodaShipmentNumber || 'není'} ---`);
 
@@ -798,8 +825,7 @@ async function runSync(testOrderId = null) {
         continue;
       }
 
-      // Tracking číslo bereme přímo z Pohody (linkedDocuments > shipments)
-      if (!inv.pohodaShipmentNumber) {
+      if (!inv.pohodaShipmentId) {
         logger.info('Sync', `Faktura ${inv.invoiceNumber} nemá zásilku - objednávka pravděpodobně ještě nebyla expedována`);
         await addLogEntry({ type: testOrderId ? 'test' : 'sync', status: 'skipped', invoiceNumber: inv.invoiceNumber, message: 'Zásilka zatím není vytvořena v Pohodě' });
         continue;
@@ -807,39 +833,31 @@ async function runSync(testOrderId = null) {
 
       logger.info('Sync', `Zásilka v Pohodě: ${inv.pohodaShipmentNumber} (ID: ${inv.pohodaShipmentId})`);
 
-      // Načíst carrier tracking kód ze zásilky (ID zásilky od dopravce, např. NB4888289662M)
-      const carrierTracking = await fetchCarrierTrackingFromPohoda(inv.pohodaShipmentId);
+      // Tracking kód z Balikobotu (eshop_id = "{pohodaShipmentId}-B" → carrier_id)
+      const carrierTracking = getTrackingFromCache(inv.pohodaShipmentId, trackingCache);
       const trackingCode = carrierTracking || inv.pohodaShipmentNumber;
-      logger.info('Sync', `Tracking kód pro Upgates: ${trackingCode} ${carrierTracking ? '(carrier)' : '(fallback - interní číslo Pohody)'}`);
-
-      const pdfBase64 = null; // PDF zatím vypnuto
+      logger.info('Sync', `Tracking kód pro Upgates: ${trackingCode} ${carrierTracking ? '(Balikobot carrier_id)' : '(fallback: interní číslo zásilky Pohody)'}`);
 
       // Odeslat do Upgates
       let trackingOk = false;
-
       try {
-        trackingOk = await updateUpgatesTracking(inv.upgatesOrderId, trackingCode, null);
+        trackingOk = await updateUpgatesTracking(inv.upgatesOrderId, trackingCode);
       } catch (err) {
         logger.error('Sync', `Chyba při ukládání tracking kódu do Upgates: ${err.message}`);
       }
-
-      // --- VYPNUTO: neuploadujeme PDF do Upgates ---
-      // if (pdfBase64) {
-      //   pdfOk = await uploadPdfToUpgates(inv.upgatesOrderId, pdfBase64, inv.invoiceNumber);
-      // }
 
       if (trackingOk) {
         if (!testOrderId) {
           db.processed.push(inv.invoiceNumber);
           await saveDb(db);
         }
-        logger.info('Sync', `Faktura ${inv.invoiceNumber} zpracována. Tracking: OK`);
+        logger.info('Sync', `Faktura ${inv.invoiceNumber} zpracována. Tracking: ${trackingCode}`);
         await addLogEntry({
           type: testOrderId ? 'test' : 'sync',
           status: 'success',
           invoiceNumber: inv.invoiceNumber,
-          trackingCode: inv.pohodaShipmentNumber,
-          message: `Tracking ${inv.pohodaShipmentNumber} úspěšně uložen do Upgates.`,
+          trackingCode,
+          message: `Tracking ${trackingCode} úspěšně uložen do Upgates (objednávka ${inv.upgatesOrderId}).`,
         });
       } else {
         logger.error('Sync', `Faktura ${inv.invoiceNumber} - tracking kód se nepodařilo uložit do Upgates!`);
