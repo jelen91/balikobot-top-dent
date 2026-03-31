@@ -210,10 +210,25 @@ async function testPohodaConnection() {
 }
 
 // ----------------------------------------------------
-// KROK 1A: ZÍSKÁNÍ FAKTUR Z POHODY PRO JEDEN DEN
-// dateFromStr a dateToStr ve formátu "YYYY-MM-DD"
+// KROK 1A: ZÍSKÁNÍ FAKTUR Z POHODY
+// Pohoda ftr:filter podporuje pouze ftr:dateFrom (bez dateTo).
+// Pro produkci stačí 1 den zpět - scheduler běží každých 15 minut.
+// Pro dobiehání použijte --days N.
 // ----------------------------------------------------
-async function fetchInvoicesForDay(dateFromStr, dateToStr) {
+async function fetchInvoicesFromPohoda(testInvoiceNumber = null, daysBack = null) {
+  const days = daysBack ?? (testInvoiceNumber ? 5 : 1);
+
+  logger.info(
+    'Pohoda',
+    testInvoiceNumber
+      ? `Načítám fakturu č. ${testInvoiceNumber} (hledám zpětně ${days} dní)...`
+      : `Načítám faktury (poslední ${days} dny)...`,
+  );
+
+  const dateFrom = new Date();
+  dateFrom.setDate(dateFrom.getDate() - days);
+  const dateFromStr = dateFrom.toISOString().split('T')[0];
+
   const reqXml = `<?xml version="1.0" encoding="UTF-8"?>
 <dat:dataPack id="ExportFaktur" ico="${POHODA_ICO}" application="TopDentSync" version="2.0" note=""
   xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
@@ -223,10 +238,7 @@ async function fetchInvoicesForDay(dateFromStr, dateToStr) {
   <dat:dataPackItem id="1" version="2.0">
     <lst:listInvoiceRequest version="2.0" invoiceType="issuedInvoice" invoiceVersion="2.0">
       <lst:requestInvoice>
-        <ftr:filter>
-          <ftr:dateFrom>${dateFromStr}</ftr:dateFrom>
-          <ftr:dateTo>${dateToStr}</ftr:dateTo>
-        </ftr:filter>
+        <ftr:filter><ftr:dateFrom>${dateFromStr}</ftr:dateFrom></ftr:filter>
       </lst:requestInvoice>
     </lst:listInvoiceRequest>
   </dat:dataPackItem>
@@ -234,133 +246,115 @@ async function fetchInvoicesForDay(dateFromStr, dateToStr) {
 
   let xmlText;
   try {
-    xmlText = await pohodaRequest(reqXml, `invoice_export_${dateFromStr}`);
+    xmlText = await pohodaRequest(reqXml, 'invoice_export');
   } catch (err) {
     const cause = err.cause ? ` | cause: ${err.cause.message || err.cause}` : '';
     console.log(`[Pohoda] fetch error detail: ${err.message}${cause}`, err.cause || '');
-    logger.error('Pohoda', `Chyba při volání mServeru (${dateFromStr}): ${err.message}${cause}`);
+    logger.error('Pohoda', `Chyba při volání mServeru: ${err.message}${cause}`);
     throw err;
   }
 
   let result;
   try {
     result = await parseXml(xmlText);
+    logger.debug('Pohoda', 'Parsovaná struktura XML response', JSON.stringify(result, null, 2).substring(0, 2000));
   } catch (err) {
     logger.error('Pohoda', `Chyba parsování XML: ${err.message}`);
     throw new Error(`Nelze parsovat XML z Pohody: ${err.message}`);
   }
 
+  logger.debug('Pohoda', 'Plná parsovaná XML struktura', JSON.stringify(result).substring(0, 3000));
+
   let invoiceItems = [];
   try {
     const pack = result.responsePack;
-    if (!pack) throw new Error('Chybí responsePack');
+    if (!pack) {
+      logger.error('Pohoda', 'Chybí responsePack v odpovědi', JSON.stringify(result).substring(0, 500));
+      throw new Error('Chybí responsePack');
+    }
 
     const packItem = pack.responsePackItem;
     const packItems = Array.isArray(packItem) ? packItem : [packItem];
 
     for (const item of packItems) {
       if (!item) continue;
+      logger.debug('Pohoda', `responsePackItem state=${item.$?.state}, klíče: ${Object.keys(item).join(', ')}`);
+
       if (item.$?.state === 'error') {
         logger.error('Pohoda', `responsePackItem error: ${item.$?.note}`);
         continue;
       }
+
       const listInvoice = item.listInvoice;
-      if (!listInvoice) continue;
+      if (!listInvoice) {
+        logger.warn('Pohoda', `responsePackItem neobsahuje listInvoice, klíče: ${Object.keys(item).join(', ')}`);
+        continue;
+      }
+
       const invoices = listInvoice.invoice;
-      if (!invoices) continue;
+      if (!invoices) {
+        logger.warn('Pohoda', 'listInvoice neobsahuje žádné faktury');
+        continue;
+      }
       invoiceItems.push(...(Array.isArray(invoices) ? invoices : [invoices]));
     }
   } catch (err) {
+    logger.error('Pohoda', `Chyba při procházení XML struktury: ${err.message}`);
     throw new Error(`Nelze extrahovat faktury z XML: ${err.message}`);
   }
 
-  return invoiceItems.map((inv, idx) => {
-    const header = inv?.invoiceHeader || inv?.['inv:invoiceHeader'] || {};
-    const numberObj = header?.number || header?.['inv:number'];
-    const invoiceNumber =
-      val(numberObj?.numberRequested || numberObj?.['typ:numberRequested']) ||
-      val(numberObj);
-    const internalId = val(header?.id || header?.['inv:id']) || inv?.$?.id;
-    const numberOrder = val(header?.numberOrder || header?.['inv:numberOrder']);
-    const date = val(header?.date || header?.['inv:date']);
+  logger.info('Pohoda', `Nalezeno ${invoiceItems.length} faktur v odpovědi`);
 
-    const linkedDocs = inv?.linkedDocuments?.link || inv?.['inv:linkedDocuments']?.['typ:link'];
-    const linkedArr = linkedDocs ? (Array.isArray(linkedDocs) ? linkedDocs : [linkedDocs]) : [];
-    const shipmentLink = linkedArr.find(l => {
-      const agenda = val(l?.sourceAgenda || l?.['typ:sourceAgenda']);
-      return agenda === 'shipments';
+  const invoices = invoiceItems
+    .map((inv, idx) => {
+      const header = inv?.invoiceHeader || inv?.['inv:invoiceHeader'] || {};
+      logger.debug('Pohoda', `Faktura ${idx + 1} - klíče headeru: ${Object.keys(header).join(', ')}`);
+
+      const numberObj = header?.number || header?.['inv:number'];
+      const invoiceNumber =
+        val(numberObj?.numberRequested || numberObj?.['typ:numberRequested']) ||
+        val(numberObj);
+      const internalId = val(header?.id || header?.['inv:id']) || inv?.$?.id;
+      const numberOrder = val(header?.numberOrder || header?.['inv:numberOrder']);
+      const date = val(header?.date || header?.['inv:date']);
+
+      const linkedDocs = inv?.linkedDocuments?.link || inv?.['inv:linkedDocuments']?.['typ:link'];
+      const linkedArr = linkedDocs ? (Array.isArray(linkedDocs) ? linkedDocs : [linkedDocs]) : [];
+      const shipmentLink = linkedArr.find(l => {
+        const agenda = val(l?.sourceAgenda || l?.['typ:sourceAgenda']);
+        return agenda === 'shipments';
+      });
+      const pohodaShipmentNumber = shipmentLink
+        ? val(shipmentLink?.sourceDocument?.number || shipmentLink?.['typ:sourceDocument']?.['typ:number'])
+        : null;
+      const pohodaShipmentId = shipmentLink
+        ? val(shipmentLink?.sourceDocument?.id || shipmentLink?.['typ:sourceDocument']?.['typ:id'])
+        : null;
+
+      logger.debug('Pohoda', `Faktura ${idx + 1}: číslo=${invoiceNumber}, internalId=${internalId}, numberOrder=${numberOrder}, shipment=${pohodaShipmentNumber} (id=${pohodaShipmentId}), datum=${date}`);
+
+      return {
+        invoiceNumber,
+        internalId,
+        numberOrder,
+        date,
+        pohodaShipmentNumber,
+        pohodaShipmentId,
+        upgatesOrderId: numberOrder,
+      };
+    })
+    .filter((inv) => {
+      if (!inv.invoiceNumber) return false;
+      if (testInvoiceNumber && inv.upgatesOrderId !== testInvoiceNumber && inv.invoiceNumber !== testInvoiceNumber) return false;
+      return true;
     });
-    const pohodaShipmentNumber = shipmentLink
-      ? val(shipmentLink?.sourceDocument?.number || shipmentLink?.['typ:sourceDocument']?.['typ:number'])
-      : null;
-    const pohodaShipmentId = shipmentLink
-      ? val(shipmentLink?.sourceDocument?.id || shipmentLink?.['typ:sourceDocument']?.['typ:id'])
-      : null;
-
-    logger.debug('Pohoda', `Faktura ${idx + 1}: číslo=${invoiceNumber}, numberOrder=${numberOrder}, shipment=${pohodaShipmentNumber} (id=${pohodaShipmentId}), datum=${date}`);
-
-    return {
-      invoiceNumber,
-      internalId,
-      numberOrder,
-      date,
-      pohodaShipmentNumber,
-      pohodaShipmentId,
-      upgatesOrderId: numberOrder,
-    };
-  }).filter(inv => inv.invoiceNumber);
-}
-
-// ----------------------------------------------------
-// KROK 1B: NAČTENÍ FAKTUR ZA POSLEDNÍCH N DNÍ (po jednom dni)
-// Každý den = samostatný request → malé XML, žádný ECONNRESET
-// ----------------------------------------------------
-async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
-  const daysBack = testInvoiceNumber ? 5 : 3;
-  logger.info(
-    'Pohoda',
-    testInvoiceNumber
-      ? `Načítám fakturu č. ${testInvoiceNumber} (hledám zpětně ${daysBack} dní, po jednom dni)...`
-      : `Načítám faktury (poslední ${daysBack} dny, po jednom dni)...`,
-  );
-
-  const allInvoices = [];
-  const seen = new Set();
-
-  for (let d = 0; d < daysBack; d++) {
-    const day = new Date();
-    day.setDate(day.getDate() - d);
-    const dateStr = day.toISOString().split('T')[0];
-
-    logger.info('Pohoda', `Načítám faktury pro ${dateStr}...`);
-    let dayInvoices;
-    try {
-      dayInvoices = await fetchInvoicesForDay(dateStr, dateStr);
-    } catch (err) {
-      logger.error('Pohoda', `Chyba pro ${dateStr}, přeskakuji: ${err.message}`);
-      continue;
-    }
-
-    logger.info('Pohoda', `${dateStr}: nalezeno ${dayInvoices.length} faktur`);
-
-    for (const inv of dayInvoices) {
-      if (seen.has(inv.invoiceNumber)) continue;
-      seen.add(inv.invoiceNumber);
-      // Test mode: zahrnout pouze hledanou fakturu
-      if (testInvoiceNumber && inv.upgatesOrderId !== testInvoiceNumber && inv.invoiceNumber !== testInvoiceNumber) continue;
-      allInvoices.push(inv);
-    }
-
-    // Test mode: jakmile fakturu najdeme, nepokračujeme dál
-    if (testInvoiceNumber && allInvoices.length > 0) break;
-  }
 
   logger.info(
     'Pohoda',
-    `Celkem ${allInvoices.length} faktur ke zpracování`,
-    allInvoices.map(i => `${i.invoiceNumber} (upgatesId: ${i.upgatesOrderId})`).join(', '),
+    `Zpracováno ${invoices.length} faktur`,
+    invoices.map((i) => `${i.invoiceNumber} (upgatesId: ${i.upgatesOrderId})`).join(', '),
   );
-  return allInvoices;
+  return invoices;
 }
 
 // ----------------------------------------------------
@@ -726,7 +720,7 @@ async function uploadPdfToUpgates(upgatesOrderId, pdfBase64, invoiceNumber) {
 // ----------------------------------------------------
 // HLAVNÍ SYNCHRONIZAČNÍ CYKLUS
 // ----------------------------------------------------
-async function runSync(testOrderId = null) {
+async function runSync(testOrderId = null, daysBack = null) {
   console.log(`[runSync] START testOrderId=${testOrderId || 'null'}`);
   if (testOrderId) {
     logger.info('Sync', `===== TESTOVACÍ REŽIM: faktura ${testOrderId} =====`);
@@ -743,7 +737,7 @@ async function runSync(testOrderId = null) {
 
   try {
     // KROK 1: Faktury z Pohody
-    let invoices = await fetchInvoicesFromPohoda(testOrderId || null);
+    let invoices = await fetchInvoicesFromPohoda(testOrderId || null, daysBack);
 
     if (testOrderId && invoices.length === 0) {
       logger.error(
@@ -850,13 +844,15 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const testPohodaIndex = args.indexOf('--test-pohoda');
   const testFlagIndex = args.indexOf('--test');
+  const daysFlagIndex = args.indexOf('--days');
+  const daysArg = daysFlagIndex !== -1 && args[daysFlagIndex + 1] ? parseInt(args[daysFlagIndex + 1], 10) : null;
 
   if (testPohodaIndex !== -1) {
     testPohodaConnection();
   } else if (testFlagIndex !== -1 && args[testFlagIndex + 1]) {
-    runSync(args[testFlagIndex + 1]);
+    runSync(args[testFlagIndex + 1], daysArg);
   } else {
-    runSync();
+    runSync(null, daysArg);
   }
 }
 
