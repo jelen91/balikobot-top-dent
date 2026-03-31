@@ -820,9 +820,13 @@ async function runSync(testOrderId = null, daysBack = null) {
       logger.info('Sync', `Zásilka v Pohodě: ${inv.pohodaShipmentNumber} (ID: ${inv.pohodaShipmentId})`);
 
       // Tracking kód z Balikobotu (eshop_id = "{pohodaShipmentId}-B" → carrier_id)
-      const carrierTracking = getTrackingFromCache(inv.pohodaShipmentId, trackingCache);
-      const trackingCode = carrierTracking || inv.pohodaShipmentNumber;
-      logger.info('Sync', `Tracking kód pro Upgates: ${trackingCode} ${carrierTracking ? '(Balikobot carrier_id)' : '(fallback: interní číslo zásilky Pohody)'}`);
+      const trackingCode = getTrackingFromCache(inv.pohodaShipmentId, trackingCache);
+      if (!trackingCode) {
+        logger.warn('Sync', `Faktura ${inv.invoiceNumber}: zásilka ${inv.pohodaShipmentId} nenalezena v Balikobotu - přeskakuji`);
+        await addLogEntry({ type: testOrderId ? 'test' : 'sync', status: 'skipped', invoiceNumber: inv.invoiceNumber, message: `Zásilka ${inv.pohodaShipmentId} nenalezena v Balikobotu` });
+        continue;
+      }
+      logger.info('Sync', `Tracking kód z Balikobotu: ${trackingCode}`);
 
       // Odeslat do Upgates
       let trackingOk = false;
