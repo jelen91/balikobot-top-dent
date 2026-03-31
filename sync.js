@@ -41,9 +41,17 @@ const LOG_FILE = path.join(__dirname, 'sync_log.json');
 async function loadDb() {
   try {
     const data = await fs.readFile(DB_FILE, 'utf8');
-    return JSON.parse(data);
+    const db = JSON.parse(data);
+    // Migrace ze starého formátu pole → objekt s daty
+    if (Array.isArray(db.processed)) {
+      const now = new Date().toISOString();
+      const obj = {};
+      for (const num of db.processed) obj[num] = now;
+      db.processed = obj;
+    }
+    return db;
   } catch (err) {
-    if (err.code === 'ENOENT') return { processed: [] };
+    if (err.code === 'ENOENT') return { processed: {} };
     throw err;
   }
 }
@@ -217,7 +225,7 @@ async function fetchInvoicesFromPohoda(testInvoiceNumber = null) {
   // Pohoda XML filter neumožňuje vyhledávat faktury přímo přes <numberOrder> v mServeru.
   // Proto sáhneme pro více dat při hledání konkrétního testu a následně to vyfiltrujeme v JavaScriptu.
   // Nastaveno na 5 dní nazpět (místo původních 30), aby mServer nevygeneroval tak obrovské XML a nečekalo se minuty!
-  let daysBack = testInvoiceNumber ? 5 : 1;
+  let daysBack = testInvoiceNumber ? 5 : 3;
   
   const dateFrom = new Date();
   dateFrom.setDate(dateFrom.getDate() - daysBack);
@@ -797,10 +805,14 @@ async function runSync(testOrderId = null) {
     }
 
     if (!testOrderId) {
-      // V produkci přeskočit již zpracované
-      invoices = invoices.filter(
-        (inv) => !db.processed.includes(inv.invoiceNumber),
-      );
+      // Prořezat staré záznamy (starší než 7 dní jsou zbytečné, zpracováváme jen 3 dny)
+      const cutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+      for (const [k, v] of Object.entries(db.processed)) {
+        if (v < cutoff) delete db.processed[k];
+      }
+
+      // V produkci přeskočit již zpracované (O(1) lookup)
+      invoices = invoices.filter((inv) => !db.processed[inv.invoiceNumber]);
       logger.info(
         'Sync',
         `${invoices.length} faktur čeká na zpracování (po odfiltrování zpracovaných)`,
@@ -848,7 +860,7 @@ async function runSync(testOrderId = null) {
 
       if (trackingOk) {
         if (!testOrderId) {
-          db.processed.push(inv.invoiceNumber);
+          db.processed[inv.invoiceNumber] = new Date().toISOString();
           await saveDb(db);
         }
         logger.info('Sync', `Faktura ${inv.invoiceNumber} zpracována. Tracking: ${trackingCode}`);
