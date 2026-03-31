@@ -754,14 +754,24 @@ async function runSync(testOrderId = null, daysBack = null) {
     }
 
     if (!testOrderId) {
-      // Prořezat staré záznamy (starší než 7 dní jsou zbytečné, zpracováváme jen 3 dny)
-      const cutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+      // Prořezat staré záznamy:
+      // - úspěšné (string datum) expirují po 7 dnech
+      // - přeskočené (objekt {skipped, until}) expirují po 2 hodinách
+      const now = Date.now();
+      const successCutoff = new Date(now - 7 * 24 * 3600 * 1000).toISOString();
       for (const [k, v] of Object.entries(db.processed)) {
-        if (v < cutoff) delete db.processed[k];
+        if (typeof v === 'string' && v < successCutoff) delete db.processed[k];
+        else if (v && typeof v === 'object' && v.skipped && now > v.until) delete db.processed[k];
       }
 
       // V produkci přeskočit již zpracované (O(1) lookup)
-      invoices = invoices.filter((inv) => !db.processed[inv.invoiceNumber]);
+      invoices = invoices.filter((inv) => {
+        const rec = db.processed[inv.invoiceNumber];
+        if (!rec) return true;
+        if (typeof rec === 'string') return false; // úspěšně zpracované
+        if (rec.skipped && now < rec.until) return false; // čeká na retry
+        return true;
+      });
       logger.info(
         'Sync',
         `${invoices.length} faktur čeká na zpracování (po odfiltrování zpracovaných)`,
@@ -797,8 +807,12 @@ async function runSync(testOrderId = null, daysBack = null) {
       // Tracking kód z Balikobotu (eshop_id = "{pohodaShipmentId}-B" → carrier_id)
       const trackingCode = getTrackingFromCache(inv.pohodaShipmentId, trackingCache);
       if (!trackingCode) {
-        logger.warn('Sync', `Faktura ${inv.invoiceNumber}: zásilka ${inv.pohodaShipmentId} nenalezena v Balikobotu - přeskakuji`);
+        logger.warn('Sync', `Faktura ${inv.invoiceNumber}: zásilka ${inv.pohodaShipmentId} nenalezena v Balikobotu - přeskakuji (retry za 2h)`);
         await addLogEntry({ type: testOrderId ? 'test' : 'sync', status: 'skipped', invoiceNumber: inv.invoiceNumber, message: `Zásilka ${inv.pohodaShipmentId} nenalezena v Balikobotu` });
+        if (!testOrderId) {
+          db.processed[inv.invoiceNumber] = { skipped: true, until: Date.now() + 2 * 3600 * 1000 };
+          await saveDb(db);
+        }
         continue;
       }
       logger.info('Sync', `Tracking kód z Balikobotu: ${trackingCode}`);
