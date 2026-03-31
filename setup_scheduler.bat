@@ -8,16 +8,15 @@ set BAT_FILE=%SCRIPT_DIR%run_sync.bat
 
 echo Vytvářím naplánovanou úlohu: %TASK_NAME%
 echo Skript: %BAT_FILE%
-echo Interval: každých 15 minut
+echo Interval: každý den v 17:00
 
 schtasks /delete /tn "%TASK_NAME%" /f 2>nul
 
 schtasks /create ^
   /tn "%TASK_NAME%" ^
   /tr "\"%BAT_FILE%\"" ^
-  /sc MINUTE ^
-  /mo 15 ^
-  /st 00:00 ^
+  /sc DAILY ^
+  /st 17:00 ^
   /ru "%USERNAME%" ^
   /rl HIGHEST ^
   /f
@@ -25,7 +24,7 @@ schtasks /create ^
 if %ERRORLEVEL% == 0 (
     echo.
     echo Úloha úspěšně vytvořena!
-    echo Spustí se automaticky každých 15 minut.
+    echo Spustí se automaticky každý den v 17:00.
     echo.
     echo Pro ruční spuštění:
     echo   schtasks /run /tn "%TASK_NAME%"
