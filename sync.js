@@ -522,18 +522,43 @@ async function buildBalikobotTrackingCache() {
     } catch (_) { /* ignore */ }
 
     try {
-      // 2. Orderview: poslední odeslaný batch - nutné načíst detaily každého balíčku
+      // 2. Orderview: posledních 5 odeslaných dávek (každá = 1 den expedice)
+      // Nejdřív zjistíme ID poslední dávky, pak jdeme zpět
       const orRes = await fetch(`${BB_API_BASE}/${carrier.slug}/orderview`, {
         headers: BB_HEADERS,
         signal: AbortSignal.timeout(5000),
       });
       if (!orRes.ok) return;
       const orData = await orRes.json();
-      if (orData.status !== 200 || !orData.package_ids?.length) return;
+      if (orData.status !== 200) return;
+      const lastOrderId = orData.order_id;
+      if (!lastOrderId) return;
 
-      const pkgIds = orData.package_ids.slice(0, 200); // max 200 balíčků na dopravce
+      // Načíst posledních 5 dávek (order_id, order_id-1, ..., order_id-4)
+      const orderIds = [];
+      for (let i = 0; i < 5; i++) {
+        const oid = lastOrderId - i;
+        if (oid > 0) orderIds.push(oid);
+      }
+
+      const orderResults = await Promise.allSettled(
+        orderIds.map(oid =>
+          fetch(`${BB_API_BASE}/${carrier.slug}/orderview/${oid}`, {
+            headers: BB_HEADERS,
+            signal: AbortSignal.timeout(5000),
+          }).then(r => r.json())
+        )
+      );
+
+      const allPkgIds = [];
+      for (const r of orderResults) {
+        if (r.status === 'fulfilled' && r.value.status === 200 && r.value.package_ids?.length) {
+          allPkgIds.push(...r.value.package_ids);
+        }
+      }
+
       const pkgResults = await Promise.allSettled(
-        pkgIds.map(pkgId =>
+        allPkgIds.slice(0, 500).map(pkgId =>
           fetch(`${BB_API_BASE}/${carrier.slug}/package/${pkgId}`, {
             headers: BB_HEADERS,
             signal: AbortSignal.timeout(5000),
